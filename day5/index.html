@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Token Counting</title>
+
+<style>
+body {
+    background: #111;
+    color: #eee;
+    font-family: Inter, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    padding: 40px;
+}
+
+textarea {
+    width: 100%;
+    height: 180px;
+    background: #1e1e1e;
+    color: #fff;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 16px;
+}
+
+button {
+    background: #0e6efd;
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 12px;
+    font-size: 16px;
+}
+
+button:hover {
+    background: #0c5bd4;
+}
+
+.result-box {
+    background: #1e1e1e;
+    color: #b5f5b0;
+    padding: 20px;
+    margin-top: 20px;
+    border-radius: 6px;
+    white-space: pre-wrap;
+}
+
+.metrics {
+    display: flex;
+    gap: 40px;
+    margin-top: 20px;
+}
+
+.metric {
+    background: #1e1e1e;
+    padding: 20px;
+    border-radius: 6px;
+    flex: 1;
+    text-align: center;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>📊 Token Counting & Context Limits</h1>
+<p>Compare three cases: short prompt, long prompt, and prompt exceeding context limit</p>
+
+<label>Model:</label>
+<select id="model">
+  <option value="gpt-4o-mini">gpt-4o-mini</option>
+  <option value="gpt-4o">gpt-4o</option>
+  <option value="gpt-5.1">gpt-5.1</option>
+  <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+</select>
+
+<h3>Test Cases</h3>
+<div style="display: flex; gap: 10px; margin-bottom: 20px;">
+  <button onclick="loadTestCase('short')" style="background: #28a745; flex: 1;">🔹 Short Prompt</button>
+  <button onclick="loadTestCase('long')" style="background: #ffc107; color: #000; flex: 1;">🔸 Long Prompt</button>
+  <button onclick="loadTestCase('exceeds')" style="background: #dc3545; flex: 1;">🔴 Exceeds Limit</button>
+</div>
+
+<h3>Prompt</h3>
+<textarea id="prompt"></textarea>
+
+<button onclick="analyzeTokens()" style="width: 100%; margin-top: 12px;">🔍 Analyze Tokens</button>
+
+<div id="metrics" class="metrics"></div>
+
+<div id="analysis" style="margin-top: 20px; padding: 20px; background: #1e1e1e; border-radius: 6px; display: none;">
+    <h3>📊 Analysis</h3>
+    <div id="analysis-content"></div>
+</div>
+
+<div id="response" class="result-box"></div>
+
+</div>
+
+<script>
+// Test case prompts
+const TEST_CASES = {
+    short: {
+        prompt: "What is Python?",
+        description: "Simple question (~20-30 tokens)"
+    },
+    long: {
+        prompt: `Write a comprehensive technical specification for a distributed microservices architecture that includes:
+
+1. System Architecture:
+   - Service mesh implementation with Istio
+   - API gateway pattern with rate limiting and authentication
+   - Event-driven architecture using Kafka
+   - Database per service pattern with eventual consistency
+   - Caching strategy using Redis cluster
+   - Message queue system with RabbitMQ
+
+2. Infrastructure Requirements:
+   - Kubernetes orchestration with auto-scaling
+   - Container registry and CI/CD pipeline
+   - Monitoring with Prometheus and Grafana
+   - Logging aggregation with ELK stack
+   - Distributed tracing with Jaeger
+   - Service discovery and load balancing
+
+3. Security:
+   - OAuth 2.0 and JWT token management
+   - API security with mTLS
+   - Secrets management with Vault
+   - Network policies and firewall rules
+   - DDoS protection and rate limiting
+   - Data encryption at rest and in transit
+
+4. Scalability:
+   - Horizontal scaling strategies
+   - Database sharding and replication
+   - CDN integration for static assets
+   - Auto-scaling policies based on metrics
+   - Resource optimization and cost management
+
+5. Reliability:
+   - Circuit breaker pattern implementation
+   - Retry mechanisms with exponential backoff
+   - Health checks and readiness probes
+   - Disaster recovery procedures
+   - Backup and restore strategies
+   - Multi-region deployment
+
+Please provide detailed explanations for each component, including code examples, configuration files, and architectural diagrams.`,
+        description: "Detailed technical request (~1500-2000 tokens)"
+    },
+    exceeds: {
+        prompt: "Write a comprehensive technical specification for a complex enterprise software system. ".repeat(500) + 
+                "Include detailed documentation for all components including microservices architecture, database design, API specifications, security protocols, scalability requirements, deployment strategies, monitoring systems, disaster recovery procedures, performance optimization techniques, and integration with third-party services. ".repeat(300) +
+                "Add extensive examples, use cases, code samples, configuration files, architectural diagrams, sequence diagrams, database schemas, API documentation, security policies, deployment scripts, monitoring dashboards, alerting rules, backup procedures, disaster recovery plans, performance benchmarks, load testing results, cost analysis, timeline estimates, risk assessments, and mitigation strategies. ".repeat(200),
+        description: "Very long prompt exceeding context limit (~20k+ tokens)"
+    }
+};
+
+function loadTestCase(type) {
+    const testCase = TEST_CASES[type];
+    if (testCase) {
+        document.getElementById("prompt").value = testCase.prompt;
+        // Auto-select gpt-3.5-turbo for exceeds limit (smaller context window)
+        if (type === 'exceeds') {
+            document.getElementById("model").value = "gpt-3.5-turbo";
+        }
+    }
+}
+
+async function analyzeTokens() {
+    let prompt = document.getElementById("prompt").value;
+    let model = document.getElementById("model").value;
+
+    if (!prompt.trim()) {
+        document.getElementById("response").innerText = "Please enter a prompt!";
+        document.getElementById("response").style.color = "#ff6b6b";
+        return;
+    }
+
+    // Show loading
+    document.getElementById("response").innerText = "Analyzing tokens...";
+    document.getElementById("response").style.color = "#b5f5b0";
+    document.getElementById("metrics").innerHTML = "";
+
+    try {
+        const res = await fetch("/count_tokens", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({model, prompt})
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+        }
+
+        const data = await res.json();
+
+    if (data.error) {
+        document.getElementById("response").innerText = `Error: ${data.error}`;
+        document.getElementById("response").style.color = "#ff6b6b";
+    } else {
+        document.getElementById("response").style.color = "#b5f5b0";
+    }
+
+    // Determine context limit based on model
+    const contextLimits = {
+        "gpt-4o-mini": 128000,
+        "gpt-4o": 128000,
+        "gpt-5.1": 128000,
+        "gpt-3.5-turbo": 16385
+    };
+    const contextLimit = contextLimits[model] || 128000;
+    const usagePercent = ((data.total_tokens || 0) / contextLimit * 100).toFixed(2);
+    
+    document.getElementById("metrics").innerHTML = `
+        <div class="metric"><h2>${data.prompt_tokens || 0}</h2><p>Prompt Tokens</p></div>
+        <div class="metric"><h2>${data.completion_tokens || 0}</h2><p>Completion Tokens</p></div>
+        <div class="metric"><h2>${data.total_tokens || 0}</h2><p>Total Tokens</p></div>
+        <div class="metric"><h2>${usagePercent}%</h2><p>Usage (of ${contextLimit.toLocaleString()})</p></div>
+    `;
+
+    // Show analysis
+    const analysisDiv = document.getElementById("analysis");
+    const analysisContent = document.getElementById("analysis-content");
+    analysisDiv.style.display = "block";
+    
+    let analysisText = "";
+    if (data.error && data.error.includes("exceeds context limit")) {
+        analysisText = `
+            <p style="color: #ff6b6b;"><strong>❌ Exceeds Context Limit:</strong></p>
+            <ul>
+                <li>Prompt tokens: ${data.prompt_tokens || 0} (exceeds max: ${Math.floor(contextLimit - 4000)})</li>
+                <li>Model cannot process this prompt - it's too long</li>
+                <li>This demonstrates what happens when you exceed the context window</li>
+                <li>Solution: Reduce prompt length or use a model with larger context window</li>
+            </ul>
+        `;
+    } else if (data.prompt_tokens < 100) {
+        analysisText = `
+            <p style="color: #28a745;"><strong>✅ Short Prompt:</strong></p>
+            <ul>
+                <li>Prompt tokens: ${data.prompt_tokens || 0} (very small)</li>
+                <li>Quick processing, minimal token usage</li>
+                <li>Model responds efficiently with concise answers</li>
+                <li>Best for: Simple questions, quick queries</li>
+            </ul>
+        `;
+    } else if (data.prompt_tokens < 2000) {
+        analysisText = `
+            <p style="color: #ffc107;"><strong>🔸 Long Prompt:</strong></p>
+            <ul>
+                <li>Prompt tokens: ${data.prompt_tokens || 0} (moderate size)</li>
+                <li>More context provided, model has detailed information</li>
+                <li>Model can generate comprehensive responses</li>
+                <li>Best for: Complex requests, detailed specifications</li>
+            </ul>
+        `;
+    } else {
+        analysisText = `
+            <p style="color: #ff9800;"><strong>⚠️ Very Long Prompt:</strong></p>
+            <ul>
+                <li>Prompt tokens: ${data.prompt_tokens || 0} (very large)</li>
+                <li>Using significant portion of context window</li>
+                <li>Close to or at context limits</li>
+                <li>Risk of exceeding limit if prompt grows further</li>
+            </ul>
+        `;
+    }
+    
+    analysisContent.innerHTML = analysisText;
+    document.getElementById("response").innerText = data.response || "No response";
+    } catch (error) {
+        document.getElementById("response").innerText = `Error: ${error.message}`;
+        document.getElementById("response").style.color = "#ff6b6b";
+        document.getElementById("metrics").innerHTML = "";
+    }
+}
+</script>
+
+</body>
+</html>
