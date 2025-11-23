@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Day 8 — MCP Tool Runner</title>
+<style>
+body {
+    background:#111;
+    color:#eee;
+    font-family:system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding:20px;
+    margin:0;
+}
+h1 { color:#4caf50; }
+.box { background:#1e1e1e; padding:16px; border-radius:6px; margin-top:20px; border:1px solid #333; }
+button {
+    padding:8px 14px;
+    background:#0e6efd;
+    color:white;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+    margin-right:8px;
+    margin-top:8px;
+}
+button:hover { background:#0b5cd1; }
+button:disabled { background:#555; cursor:not-allowed; }
+input, textarea {
+    width:100%;
+    padding:8px;
+    background:#0a0a0a;
+    color:#fff;
+    border:1px solid #333;
+    border-radius:4px;
+    margin-top:4px;
+    box-sizing:border-box;
+}
+label {
+    display:block;
+    margin-top:8px;
+    color:#ccc;
+    font-size:0.9rem;
+}
+.result {
+    background:#000;
+    padding:10px;
+    margin-top:10px;
+    border-radius:4px;
+    white-space:pre-wrap;
+    font-family: "Courier New", monospace;
+    font-size:13px;
+    border-left:3px solid #4caf50;
+}
+.result.error {
+    border-left-color:#dc3545;
+    color:#ff6b6b;
+}
+.tool-card {
+    border-left:4px solid #4caf50;
+    padding:10px;
+    margin-bottom:14px;
+    background:#263238;
+    border-radius:4px;
+}
+.tool-name { font-weight:bold; color:#4caf50; font-size:1.1rem; margin-bottom:6px; }
+.tool-desc { color:#ccc; font-size:0.9rem; margin-bottom:8px; }
+.status-box {
+    background:#1e1e1e;
+    padding:12px;
+    border-radius:6px;
+    margin-bottom:20px;
+    border-left:4px solid #dc3545;
+}
+.status-box.connected {
+    border-left-color:#4caf50;
+}
+</style>
+</head>
+<body>
+
+<h1>🔌 Day 8 — MCP Integration + Slack (read-only)</h1>
+<p>Connect to the MCP server, see available tools, and call them (including Slack readers).</p>
+
+<div class="box status-box" id="statusBox">Status: Not connected</div>
+
+<button onclick="connectMCP()" id="connectBtn">Connect to MCP</button>
+
+<div class="box" id="toolsBox">
+    <h2>🧰 Tools</h2>
+    <div id="toolsContent">Click "Connect to MCP" to load tools.</div>
+</div>
+
+<script>
+let tools = [];
+let connected = false;
+
+async function connectMCP() {
+    const statusBox = document.getElementById("statusBox");
+    const connectBtn = document.getElementById("connectBtn");
+    statusBox.textContent = "Connecting to MCP...";
+    connectBtn.disabled = true;
+
+    try {
+        const res = await fetch("/connect");
+        const data = await res.json();
+
+        if (!data.success) {
+            statusBox.textContent = "❌ Failed: " + (data.error || "Unknown error");
+            statusBox.className = "box status-box";
+            connectBtn.disabled = false;
+            return;
+        }
+
+        connected = true;
+        tools = data.tools || [];
+        statusBox.textContent = `✅ Connected. Found ${data.count || tools.length} tools.`;
+        statusBox.className = "box status-box connected";
+        connectBtn.disabled = false;
+        renderTools();
+    } catch (err) {
+        statusBox.textContent = "❌ Error: " + err.message;
+        statusBox.className = "box status-box";
+        connectBtn.disabled = false;
+    }
+}
+
+function renderTools() {
+    const container = document.getElementById("toolsContent");
+    container.innerHTML = "";
+
+    if (!tools.length) {
+        container.textContent = "No tools returned from MCP server.";
+        return;
+    }
+
+    tools.forEach(tool => {
+        const card = document.createElement("div");
+        card.className = "tool-card";
+
+        const schema = tool.input_schema || tool.inputSchema || {};
+        const props = (schema && schema.properties) ? schema.properties : {};
+        const required = (schema && schema.required) ? schema.required : [];
+
+        let formHtml = "";
+        for (const key in props) {
+            const p = props[key];
+            const isRequired = required.includes(key);
+            const labelText = `${key}${isRequired ? " *" : ""} (${p.type || "string"})`;
+            const placeholder = p.description || "";
+            
+            if (p.type === "integer") {
+                formHtml += `
+                    <label>${labelText}</label>
+                    <input type="number" id="${tool.name}__${key}" placeholder="${placeholder}" value="${p.default || ""}">
+                `;
+            } else {
+                formHtml += `
+                    <label>${labelText}</label>
+                    <input type="text" id="${tool.name}__${key}" placeholder="${placeholder}" value="${p.default || ""}">
+                `;
+            }
+        }
+        if (!formHtml) {
+            formHtml = "<em>No arguments required</em>";
+        }
+
+        card.innerHTML = `
+            <div class="tool-name">${tool.name}</div>
+            <div class="tool-desc">${tool.description || ""}</div>
+            <div>${formHtml}</div>
+            <button onclick="runTool('${tool.name}')">Run</button>
+            <div id="result-${tool.name}" class="result" style="display:none;"></div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+async function runTool(toolName) {
+    if (!connected) {
+        alert("Connect to MCP first.");
+        return;
+    }
+
+    const tool = tools.find(t => t.name === toolName);
+    const schema = tool.input_schema || tool.inputSchema || {};
+    const props = (schema && schema.properties) ? schema.properties : {};
+    const required = (schema && schema.required) ? schema.required : [];
+
+    const args = {};
+    for (const key in props) {
+        const el = document.getElementById(`${toolName}__${key}`);
+        if (el) {
+            const val = el.value.trim();
+            if (val === "" && !required.includes(key)) {
+                continue; // Skip optional empty fields
+            }
+            if (props[key].type === "integer") {
+                args[key] = parseInt(val || "0", 10);
+            } else {
+                args[key] = val;
+            }
+        }
+    }
+
+    // Check required fields
+    for (const reqKey of required) {
+        if (!(reqKey in args) || args[reqKey] === "") {
+            alert(`Required field "${reqKey}" is missing.`);
+            return;
+        }
+    }
+
+    const resultDiv = document.getElementById(`result-${toolName}`);
+    resultDiv.style.display = "block";
+    resultDiv.className = "result";
+    resultDiv.textContent = "⏳ Calling tool...";
+
+    try {
+        const res = await fetch("/call", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ tool: toolName, args })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            resultDiv.className = "result";
+            resultDiv.textContent = JSON.stringify(data.result, null, 2);
+        } else {
+            resultDiv.className = "result error";
+            resultDiv.textContent = "❌ Error: " + (data.error || "Unknown error");
+        }
+    } catch (err) {
+        resultDiv.className = "result error";
+        resultDiv.textContent = "❌ Error: " + err.message;
+    }
+}
+
+// Auto-connect on page load
+window.addEventListener("load", function() {
+    setTimeout(connectMCP, 100);
+});
+</script>
+
+</body>
+</html>
