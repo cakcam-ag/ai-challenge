@@ -1,0 +1,1 @@
+Slack bots are capable of posting updates directly into channels. This functionality allows for automated communication and information sharing within teams. By using bots, users can streamline notifications and keep everyone informed efficiently.

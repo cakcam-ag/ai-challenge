@@ -1,0 +1,3 @@
+Python is often used to build recommendation systems.
+We like to talk about user embeddings and ranking models.
+This document covers offline evaluation and online experimentation.

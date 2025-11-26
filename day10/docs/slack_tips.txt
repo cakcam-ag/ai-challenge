@@ -1,0 +1,3 @@
+Slack bots can post updates into channels.
+Use list_public_channels to discover where your bot can talk.
+Remember to store summaries of conversations for quick review.
