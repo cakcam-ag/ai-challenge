@@ -8,7 +8,7 @@ import json
 import faiss
 import numpy as np
 from typing import List, Dict
-from openai import OpenAI
+import requests
 import tiktoken
 from dotenv import load_dotenv
 
@@ -26,7 +26,14 @@ EMBED_MODEL = "text-embedding-3-large"
 CHUNK_SIZE = 400
 CHUNK_OVERLAP = 50
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+def openai_headers():
+    """Get headers for OpenAI API requests."""
+    return {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
 tokenizer = tiktoken.get_encoding("cl100k_base")
 
@@ -52,11 +59,21 @@ def chunk_text(text: str, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP) -> List[
 # Utility: embed text
 # ------------------------------
 def embed(texts: List[str]) -> List[List[float]]:
-    res = client.embeddings.create(
-        model=EMBED_MODEL,
-        input=texts
-    )
-    return [d.embedding for d in res.data]
+    """Generate embeddings using OpenAI API via HTTP."""
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY not configured")
+    
+    url = "https://api.openai.com/v1/embeddings"
+    payload = {
+        "model": EMBED_MODEL,
+        "input": texts
+    }
+    
+    response = requests.post(url, headers=openai_headers(), json=payload, timeout=120)
+    response.raise_for_status()
+    data = response.json()
+    
+    return [item["embedding"] for item in data["data"]]
 
 
 # ------------------------------

@@ -1,0 +1,8 @@
+[
+  {
+    "text": "# Sample Document\n\nThis is a sample document for testing the document indexing system.\n\n## Features\n\n- Document chunking\n- Embedding generation\n- FAISS indexing\n- Semantic search\n\nThe system processes text files and creates searchable embeddings.\n",
+    "meta": {
+      "file": "sample.txt"
+    }
+  }
+]
