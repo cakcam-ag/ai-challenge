@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Day 13 — Document Indexing</title>
+<meta charset="UTF-8">
+<style>
+body { 
+    background:#111; 
+    color:#eee; 
+    font-family:system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; 
+    padding:20px; 
+    max-width:1200px;
+    margin:0 auto;
+}
+h1 { color:#4caf50; margin-bottom:4px; }
+h2 { color:#81c784; margin-top:30px; margin-bottom:10px; }
+button { 
+    padding:10px 15px; 
+    margin-top:10px; 
+    border:none; 
+    border-radius:6px; 
+    background:#4caf50; 
+    color:white; 
+    cursor:pointer;
+    font-size:1rem;
+}
+button:hover { background:#45a049; }
+button:disabled { background:#555; cursor:not-allowed; }
+textarea, input { 
+    width:100%; 
+    margin-top:10px; 
+    background:#222; 
+    color:#fff; 
+    border:1px solid #444; 
+    padding:10px; 
+    border-radius:4px;
+    box-sizing:border-box;
+    font-size:1rem;
+}
+textarea { min-height:100px; }
+.result { 
+    background:#1e1e1e; 
+    padding:15px; 
+    margin-top:15px; 
+    border-left:4px solid #4caf50; 
+    border-radius:4px;
+}
+.result strong { color:#4caf50; display:block; margin-bottom:8px; }
+.result em { color:#aaa; font-size:0.9rem; }
+.status { 
+    background:#263238; 
+    padding:12px; 
+    margin-top:10px; 
+    border-radius:4px; 
+    border-left:4px solid #4caf50;
+}
+.status.error { border-left-color:#d32f2f; color:#ff6b6b; }
+.subtitle { color:#aaa; margin-bottom:20px; font-size:0.9rem; }
+</style>
+</head>
+<body>
+
+<h1>📚 Day 13 — Document Indexing (FAISS + Embeddings)</h1>
+<p class="subtitle">Index documents from <code>data/docs/</code> and search using semantic embeddings.</p>
+
+<h2>1. Rebuild Index</h2>
+<p class="subtitle">Process all .txt and .md files in <code>data/docs/</code> directory.</p>
+<button onclick="reindex()" id="reindexBtn">Reindex Documents</button>
+<div id="status"></div>
+
+<h2>2. Query</h2>
+<p class="subtitle">Search the indexed documents using semantic similarity.</p>
+<input id="query" placeholder="Type a question, keyword, or phrase..." type="text">
+<button onclick="search()" id="searchBtn">Search</button>
+
+<div id="results"></div>
+
+<script>
+async function reindex() {
+    const btn = document.getElementById("reindexBtn");
+    const status = document.getElementById("status");
+    btn.disabled = true;
+    status.innerHTML = '<div class="status">Building index... This may take a moment.</div>';
+    
+    try {
+        const res = await fetch("/reindex", { method:"POST" });
+        const data = await res.json();
+        
+        if (data.success) {
+            status.innerHTML = `<div class="status">✅ ${data.message || "Index rebuilt successfully!"}</div>`;
+        } else {
+            status.innerHTML = `<div class="status error">❌ Error: ${data.error || "Unknown error"}</div>`;
+        }
+    } catch (err) {
+        status.innerHTML = `<div class="status error">❌ Error: ${err.message}</div>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function search() {
+    const btn = document.getElementById("searchBtn");
+    const queryInput = document.getElementById("query");
+    const resultsDiv = document.getElementById("results");
+    const q = queryInput.value.trim();
+    
+    if (!q) {
+        resultsDiv.innerHTML = '<div class="status error">Please enter a query.</div>';
+        return;
+    }
+    
+    btn.disabled = true;
+    resultsDiv.innerHTML = '<div class="status">Searching...</div>';
+    
+    try {
+        const res = await fetch("/query", {
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify({ query:q, top_k:5 })
+        });
+        const data = await res.json();
+        
+        if (data.success && data.results) {
+            if (data.results.length === 0) {
+                resultsDiv.innerHTML = '<div class="status">No results found.</div>';
+            } else {
+                const out = data.results.map((r, i) =>
+                    `<div class='result'>
+                        <strong>${i+1}. ${r.meta.file}</strong>
+                        <div style="margin-top:8px; line-height:1.6;">${r.chunk}</div>
+                        <em style="margin-top:8px; display:block;">Distance: ${r.score.toFixed(4)}</em>
+                    </div>`
+                ).join("");
+                resultsDiv.innerHTML = out;
+            }
+        } else {
+            resultsDiv.innerHTML = `<div class="status error">❌ Error: ${data.error || "Unknown error"}</div>`;
+        }
+    } catch (err) {
+        resultsDiv.innerHTML = `<div class="status error">❌ Error: ${err.message}</div>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// Allow Enter key to trigger search
+document.getElementById("query").addEventListener("keypress", function(e) {
+    if (e.key === "Enter") {
+        search();
+    }
+});
+</script>
+
+</body>
+</html>
+

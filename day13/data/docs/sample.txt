@@ -1,0 +1,12 @@
+# Sample Document
+
+This is a sample document for testing the document indexing system.
+
+## Features
+
+- Document chunking
+- Embedding generation
+- FAISS indexing
+- Semantic search
+
+The system processes text files and creates searchable embeddings.
