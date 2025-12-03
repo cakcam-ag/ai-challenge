@@ -11,7 +11,17 @@ from openai import AsyncOpenAI
 
 load_dotenv()
 
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+_client = None
+
+def get_client():
+    """Lazy initialization of AsyncOpenAI client to avoid import-time errors."""
+    global _client
+    if _client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not found in environment")
+        _client = AsyncOpenAI(api_key=api_key)
+    return _client
 
 INDEX_FILE = "rag_index.json"
 DOCS_DIR = os.path.join("data", "docs")
