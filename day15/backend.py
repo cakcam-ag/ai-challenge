@@ -23,6 +23,7 @@ def get_client():
         _client = AsyncOpenAI(api_key=api_key)
     return _client
 
+
 INDEX_FILE = "rag_index.json"
 DOCS_DIR = os.path.join("data", "docs")
 
@@ -86,26 +87,22 @@ def cosine_sim(a: List[float], b: List[float]) -> float:
 
 
 # -------------------------------------------------------
-# LLM HELPERS
+# LLM HELPERS  (FIXED for new Responses API)
 # -------------------------------------------------------
 
 async def ask_llm_no_rag(question: str) -> str:
-    """Plain answer, no retrieved context."""
     client = get_client()
     try:
-        resp = await client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "user", "content": question}
-            ],
+        resp = await client.responses.create(
+            model="gpt-4.1-mini",
+            input=question
         )
-        return resp.choices[0].message.content.strip()
+        return resp.output_text
     except Exception as e:
         raise Exception(f"LLM error: {str(e)}")
 
 
 async def ask_llm_with_rag(question: str, chunks: List[Dict[str, Any]]) -> str:
-    """Answer using retrieved chunks as context."""
     context_texts = [f"[{c['doc']} #{c['chunk_index']}] {c['text']}" for c in chunks]
     context_block = "\n\n".join(context_texts)
 
@@ -119,11 +116,11 @@ async def ask_llm_with_rag(question: str, chunks: List[Dict[str, Any]]) -> str:
 
     client = get_client()
     try:
-        resp = await client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
+        resp = await client.responses.create(
+            model="gpt-4.1",
+            input=prompt
         )
-        return resp.choices[0].message.content.strip()
+        return resp.output_text
     except Exception as e:
         raise Exception(f"LLM error: {str(e)}")
 
@@ -266,11 +263,7 @@ async def ask_endpoint(req: Request):
 
     mode = body.get("mode", "compare")
     top_k = int(body.get("top_k", 8))
-    threshold = body.get("threshold", 0.35)
-    try:
-        threshold = float(threshold)
-    except Exception:
-        threshold = 0.35
+    threshold = float(body.get("threshold", 0.35))
 
     result: Dict[str, Any] = {
         "success": True,
@@ -280,17 +273,15 @@ async def ask_endpoint(req: Request):
     }
 
     # always compute retrieval once (for compare modes)
-    retrieval_unfiltered = await retrieve_chunks(question, top_k=top_k, similarity_threshold=None)
-    retrieval_filtered = await retrieve_chunks(question, top_k=top_k, similarity_threshold=threshold)
+    retrieval_unfiltered = await retrieve_chunks(question, top_k=top_k)
+    retrieval_filtered = await retrieve_chunks(
+        question, top_k=top_k, similarity_threshold=threshold
+    )
 
     if mode == "plain":
         ans_plain = await ask_llm_no_rag(question)
-        result.update(
-            {
-                "mode": "plain",
-                "answer_plain": ans_plain,
-            }
-        )
+        result.update({"mode": "plain", "answer_plain": ans_plain})
+
     elif mode == "rag_unfiltered":
         ans_rag = await ask_llm_with_rag(question, retrieval_unfiltered["chunks"])
         result.update(
@@ -300,6 +291,7 @@ async def ask_endpoint(req: Request):
                 "chunks_unfiltered": retrieval_unfiltered["chunks"],
             }
         )
+
     elif mode == "rag_filtered":
         ans_rag = await ask_llm_with_rag(question, retrieval_filtered["chunks"])
         result.update(
@@ -309,7 +301,8 @@ async def ask_endpoint(req: Request):
                 "chunks_filtered": retrieval_filtered["chunks"],
             }
         )
-    else:  # "compare" → show all three
+
+    else:  # compare
         ans_plain = await ask_llm_no_rag(question)
         ans_unfiltered = await ask_llm_with_rag(question, retrieval_unfiltered["chunks"])
         ans_filtered = await ask_llm_with_rag(question, retrieval_filtered["chunks"])
@@ -348,4 +341,3 @@ async def health():
         "chunks": len(index.get("chunks", [])),
         "docs_dir": os.path.abspath(DOCS_DIR),
     }
-
