@@ -67,14 +67,18 @@ def save_index(index: Dict[str, Any]) -> None:
 
 async def embed_text(text: str) -> List[float]:
     """Get a unit-norm embedding for text."""
-    resp = await client.embeddings.create(
-        model="text-embedding-3-small",
-        input=[text],
-    )
-    vec = resp.data[0].embedding
-    # L2-normalize so cosine = dot
-    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
-    return [v / norm for v in vec]
+    client = get_client()
+    try:
+        resp = await client.embeddings.create(
+            model="text-embedding-3-small",
+            input=[text],
+        )
+        vec = resp.data[0].embedding
+        # L2-normalize so cosine = dot
+        norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+        return [v / norm for v in vec]
+    except Exception as e:
+        raise Exception(f"Embedding error: {str(e)}")
 
 
 def cosine_sim(a: List[float], b: List[float]) -> float:
@@ -87,13 +91,17 @@ def cosine_sim(a: List[float], b: List[float]) -> float:
 
 async def ask_llm_no_rag(question: str) -> str:
     """Plain answer, no retrieved context."""
-    resp = await client.chat.completions.create(
-        model="gpt-5.1",
-        messages=[
-            {"role": "user", "content": question}
-        ],
-    )
-    return resp.choices[0].message.content.strip()
+    client = get_client()
+    try:
+        resp = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "user", "content": question}
+            ],
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        raise Exception(f"LLM error: {str(e)}")
 
 
 async def ask_llm_with_rag(question: str, chunks: List[Dict[str, Any]]) -> str:
@@ -109,11 +117,15 @@ async def ask_llm_with_rag(question: str, chunks: List[Dict[str, Any]]) -> str:
         f"QUESTION: {question}"
     )
 
-    resp = await client.chat.completions.create(
-        model="gpt-5.1",
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return resp.choices[0].message.content.strip()
+    client = get_client()
+    try:
+        resp = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        raise Exception(f"LLM error: {str(e)}")
 
 
 # -------------------------------------------------------
