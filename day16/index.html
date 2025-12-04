@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Day 16 — RAG with Citations & Sources</title>
+  <style>
+    body {
+      background:#0b0b0b;
+      color:#f5f5f5;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px;
+    }
+    h1 { color:#4caf50; margin-bottom:4px; }
+    .subtitle { color:#aaa; margin-bottom:16px; font-size:0.9rem; }
+    .box {
+      background:#151515;
+      border-radius:10px;
+      padding:16px 18px;
+      border:1px solid #333;
+      margin-bottom:18px;
+    }
+    button {
+      padding:8px 14px;
+      border-radius:6px;
+      border:none;
+      background:#0e6efd;
+      color:#fff;
+      font-size:0.9rem;
+      cursor:pointer;
+      margin-right:8px;
+      margin-top:8px;
+    }
+    button:hover { background:#0b5cd1; }
+    button:disabled { background:#555; cursor:not-allowed; }
+    input, textarea {
+      width:100%;
+      box-sizing:border-box;
+      padding:8px;
+      border-radius:6px;
+      border:1px solid #444;
+      background:#050505;
+      color:#f5f5f5;
+      font-family:inherit;
+      font-size:0.9rem;
+      margin-top:6px;
+      margin-bottom:10px;
+    }
+    label {
+      font-size:0.85rem;
+      color:#ccc;
+    }
+    .row { display:flex; flex-wrap:wrap; gap:16px; }
+    .col { flex:1 1 0; min-width:260px; }
+    pre {
+      background:#000;
+      color:#e5ffe5;
+      border-radius:6px;
+      padding:10px;
+      font-size:0.8rem;
+      white-space:pre-wrap;
+      word-wrap:break-word;
+      border-left:3px solid #4caf50;
+      max-height:420px;
+      overflow:auto;
+    }
+    .small { color:#999; font-size:0.8rem; }
+    .status {
+      background:#111;
+      border-radius:6px;
+      padding:8px 10px;
+      margin-bottom:14px;
+      border-left:4px solid #4caf50;
+      font-size:0.85rem;
+    }
+    .status.error { border-left-color:#ff5252; }
+    .chunk-list {
+      font-size:0.78rem;
+      margin-top:8px;
+      background:#050505;
+      border-radius:4px;
+      padding:6px;
+      max-height:220px;
+      overflow:auto;
+      border:1px solid #333;
+    }
+    .citation {
+      background:#2d5016;
+      color:#90ee90;
+      padding:2px 4px;
+      border-radius:3px;
+      font-weight:bold;
+    }
+    .citation-section {
+      background:#1a3d0a;
+      border-left:3px solid #4caf50;
+      padding:8px;
+      margin-top:8px;
+      border-radius:4px;
+    }
+    .citation-badge {
+      display:inline-block;
+      background:#4caf50;
+      color:#000;
+      padding:2px 6px;
+      border-radius:3px;
+      font-size:0.75rem;
+      font-weight:bold;
+      margin-left:8px;
+    }
+    .citation-badge.missing {
+      background:#ff5252;
+      color:#fff;
+    }
+  </style>
+</head>
+<body>
+  <h1>📚 Day 16 — RAG with Citations & Sources</h1>
+  <p class="subtitle">
+    RAG pipeline that enforces citations in every answer. Compare answers with and without citations.
+  </p>
+
+  <div id="statusBox" class="status">
+    Status: <span id="statusText">Idle</span>
+  </div>
+
+  <!-- 1. Reindex -->
+  <div class="box">
+    <h2>1. Rebuild Index</h2>
+    <p class="small">
+      Reads documents from <code>data/docs/</code>, chunks them, embeds with <code>text-embedding-3-small</code>,
+      and stores them in <code>rag_index.json</code>. Each chunk gets a unique ID (filename#chunk_index).
+    </p>
+    <button onclick="reindex()" id="reindexBtn">Reindex Documents</button>
+    <pre id="reindexResult" style="margin-top:10px; display:none;"></pre>
+  </div>
+
+  <!-- 2. Ask -->
+  <div class="box">
+    <h2>2. Ask a Question</h2>
+    <label>Your question</label>
+    <textarea id="questionInput" rows="4" placeholder="e.g., What are viral loops? How do AI agents work?"></textarea>
+
+    <div class="row">
+      <div class="col">
+        <label>Top K chunks</label>
+        <input id="topKInput" type="number" min="1" max="32" value="8" />
+      </div>
+      <div class="col">
+        <label>Similarity threshold for filtering (0.0 - 1.0)</label>
+        <input id="thresholdInput" type="number" step="0.01" min="0" max="1" value="0.35" />
+        <p class="small">Chunks below this cosine similarity are dropped in the filtered run.</p>
+      </div>
+    </div>
+
+    <button onclick="askCompare()">Compare (Plain vs RAG with Citations)</button>
+    <button onclick="askMode('plain')">Plain Only (No Citations)</button>
+    <button onclick="askMode('rag_unfiltered')">RAG + Citations (No Filter)</button>
+    <button onclick="askMode('rag_filtered')">RAG + Citations (Filtered)</button>
+
+    <div class="row" style="margin-top:16px;">
+      <div class="col">
+        <h3 style="font-size:0.95rem;">
+          Plain LLM (no RAG)
+          <span class="citation-badge missing">No Citations</span>
+        </h3>
+        <pre id="plainAnswer"></pre>
+      </div>
+      <div class="col">
+        <h3 style="font-size:0.95rem;">
+          RAG with Citations (no filter)
+          <span class="citation-badge" id="citationBadgeUnfiltered">Citations</span>
+        </h3>
+        <pre id="ragUnfilteredAnswer"></pre>
+        <div class="chunk-list" id="chunksUnfiltered"></div>
+      </div>
+      <div class="col">
+        <h3 style="font-size:0.95rem;">
+          RAG with Citations (filtered)
+          <span class="citation-badge" id="citationBadgeFiltered">Citations</span>
+        </h3>
+        <pre id="ragFilteredAnswer"></pre>
+        <div class="chunk-list" id="chunksFiltered"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+function setStatus(text, isError=false) {
+  const box = document.getElementById("statusBox");
+  document.getElementById("statusText").textContent = text;
+  box.className = "status" + (isError ? " error" : "");
+}
+
+function highlightCitations(text) {
+  // Highlight inline citations like [file#number]
+  const citationRegex = /(\[[\w\.]+#\d+\])/g;
+  return text.replace(citationRegex, '<span class="citation">$1</span>');
+}
+
+function checkCitations(text) {
+  // Check for citation patterns
+  const patterns = [
+    /CITATIONS?:/i,
+    /Sources?:/i,
+    /\[[\w\.]+#\d+\]/g
+  ];
+  
+  for (const pattern of patterns) {
+    if (pattern.test(text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function extractCitations(text) {
+  const citations = [];
+  const matches = text.matchAll(/\[([\w\.]+)#(\d+)\]/g);
+  for (const match of matches) {
+    citations.push(`${match[1]}#${match[2]}`);
+  }
+  return [...new Set(citations)]; // unique
+}
+
+async function reindex() {
+  setStatus("Reindexing documents...");
+  document.getElementById("reindexBtn").disabled = true;
+  const pre = document.getElementById("reindexResult");
+  pre.style.display = "block";
+  pre.textContent = "Running /reindex ...";
+
+  try {
+    const res = await fetch("/reindex", { method: "POST" });
+    const data = await res.json();
+    pre.textContent = JSON.stringify(data, null, 2);
+    if (data.success) {
+      setStatus(`Indexed ${data.doc_count} docs into ${data.chunk_count} chunks.`);
+    } else {
+      setStatus("Reindex failed", true);
+    }
+  } catch (err) {
+    pre.textContent = "Error: " + err.message;
+    setStatus("Reindex crashed", true);
+  } finally {
+    document.getElementById("reindexBtn").disabled = false;
+  }
+}
+
+function clearAnswers() {
+  document.getElementById("plainAnswer").textContent = "";
+  document.getElementById("ragUnfilteredAnswer").textContent = "";
+  document.getElementById("ragFilteredAnswer").textContent = "";
+  document.getElementById("chunksUnfiltered").textContent = "";
+  document.getElementById("chunksFiltered").textContent = "";
+}
+
+async function askCompare() {
+  await askInternal("compare");
+}
+
+async function askMode(mode) {
+  await askInternal(mode);
+}
+
+async function askInternal(mode) {
+  const q = document.getElementById("questionInput").value.trim();
+  if (!q) {
+    alert("Write a question first.");
+    return;
+  }
+  const topK = parseInt(document.getElementById("topKInput").value || "8", 10);
+  const threshold = parseFloat(document.getElementById("thresholdInput").value || "0.35");
+
+  clearAnswers();
+  setStatus(`Asking (${mode})...`);
+  try {
+    const res = await fetch("/ask", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ question: q, mode, top_k: topK, threshold })
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      setStatus("Error: " + (data.error || "Unknown"), true);
+      return;
+    }
+
+    // Plain answer (no citations)
+    if (data.answer_plain) {
+      document.getElementById("plainAnswer").textContent = data.answer_plain;
+    }
+
+    // RAG unfiltered (with citations)
+    if (data.answer_rag_unfiltered) {
+      const hasCitations = checkCitations(data.answer_rag_unfiltered);
+      const badge = document.getElementById("citationBadgeUnfiltered");
+      badge.textContent = hasCitations ? "✓ Citations Found" : "✗ No Citations";
+      badge.className = "citation-badge" + (hasCitations ? "" : " missing");
+      
+      const citations = extractCitations(data.answer_rag_unfiltered);
+      const answerDiv = document.getElementById("ragUnfilteredAnswer");
+      answerDiv.innerHTML = highlightCitations(data.answer_rag_unfiltered);
+      
+      if (citations.length > 0) {
+        const citationInfo = document.createElement("div");
+        citationInfo.className = "citation-section";
+        citationInfo.innerHTML = `<strong>Citations found:</strong> ${citations.join(", ")}`;
+        answerDiv.appendChild(citationInfo);
+      }
+    }
+
+    // RAG filtered (with citations)
+    if (data.answer_rag_filtered) {
+      const hasCitations = checkCitations(data.answer_rag_filtered);
+      const badge = document.getElementById("citationBadgeFiltered");
+      badge.textContent = hasCitations ? "✓ Citations Found" : "✗ No Citations";
+      badge.className = "citation-badge" + (hasCitations ? "" : " missing");
+      
+      const citations = extractCitations(data.answer_rag_filtered);
+      const answerDiv = document.getElementById("ragFilteredAnswer");
+      answerDiv.innerHTML = highlightCitations(data.answer_rag_filtered);
+      
+      if (citations.length > 0) {
+        const citationInfo = document.createElement("div");
+        citationInfo.className = "citation-section";
+        citationInfo.innerHTML = `<strong>Citations found:</strong> ${citations.join(", ")}`;
+        answerDiv.appendChild(citationInfo);
+      }
+    }
+
+    // Show chunks used
+    if (data.chunks_unfiltered) {
+      const chunkInfo = data.chunks_unfiltered.map(c => 
+        `[${c.doc}#${c.chunk_index}] (score: ${c.score.toFixed(3)})`
+      ).join("\n");
+      document.getElementById("chunksUnfiltered").textContent = 
+        "Chunks used (no filter):\n" + chunkInfo;
+    }
+    if (data.chunks_filtered) {
+      const chunkInfo = data.chunks_filtered.map(c => 
+        `[${c.doc}#${c.chunk_index}] (score: ${c.score.toFixed(3)})`
+      ).join("\n");
+      document.getElementById("chunksFiltered").textContent = 
+        "Chunks used (filtered):\n" + chunkInfo;
+    }
+
+    setStatus("Done.");
+  } catch (err) {
+    setStatus("Request failed: " + err.message, true);
+  }
+}
+</script>
+</body>
+</html>
+
