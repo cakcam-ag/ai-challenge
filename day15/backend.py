@@ -23,7 +23,6 @@ def get_client():
         _client = AsyncOpenAI(api_key=api_key)
     return _client
 
-
 INDEX_FILE = "rag_index.json"
 DOCS_DIR = os.path.join("data", "docs")
 
@@ -87,7 +86,7 @@ def cosine_sim(a: List[float], b: List[float]) -> float:
 
 
 # -------------------------------------------------------
-# LLM HELPERS  (FIXED for new Responses API)
+# LLM HELPERS
 # -------------------------------------------------------
 
 async def ask_llm_no_rag(question: str) -> str:
@@ -99,7 +98,7 @@ async def ask_llm_no_rag(question: str) -> str:
         )
         return resp.output_text
     except Exception as e:
-        raise Exception(f"LLM error: {str(e)}")
+        raise Exception(f"LLM error (plain): {str(e)}")
 
 
 async def ask_llm_with_rag(question: str, chunks: List[Dict[str, Any]]) -> str:
@@ -122,7 +121,7 @@ async def ask_llm_with_rag(question: str, chunks: List[Dict[str, Any]]) -> str:
         )
         return resp.output_text
     except Exception as e:
-        raise Exception(f"LLM error: {str(e)}")
+        raise Exception(f"LLM error (RAG): {str(e)}")
 
 
 # -------------------------------------------------------
