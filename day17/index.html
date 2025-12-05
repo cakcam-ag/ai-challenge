@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Day 17 — Image Generation Fundamentals</title>
+  <style>
+    body {
+      background:#0b0b0b;
+      color:#f5f5f5;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px;
+    }
+    h1 { color:#4caf50; margin-bottom:4px; }
+    .subtitle { color:#aaa; margin-bottom:16px; font-size:0.9rem; }
+    .box {
+      background:#151515;
+      border-radius:10px;
+      padding:16px 18px;
+      border:1px solid #333;
+      margin-bottom:18px;
+    }
+    button {
+      padding:8px 14px;
+      border-radius:6px;
+      border:none;
+      background:#0e6efd;
+      color:#fff;
+      font-size:0.9rem;
+      cursor:pointer;
+      margin-right:8px;
+      margin-top:8px;
+    }
+    button:hover { background:#0b5cd1; }
+    button:disabled { background:#555; cursor:not-allowed; }
+    input, textarea, select {
+      width:100%;
+      box-sizing:border-box;
+      padding:8px;
+      border-radius:6px;
+      border:1px solid #444;
+      background:#050505;
+      color:#f5f5f5;
+      font-family:inherit;
+      font-size:0.9rem;
+      margin-top:6px;
+      margin-bottom:10px;
+    }
+    label {
+      font-size:0.85rem;
+      color:#ccc;
+      display:block;
+      margin-top:8px;
+    }
+    .row { display:flex; flex-wrap:wrap; gap:16px; }
+    .col { flex:1 1 0; min-width:200px; }
+    .status {
+      background:#111;
+      border-radius:6px;
+      padding:8px 10px;
+      margin-bottom:14px;
+      border-left:4px solid #4caf50;
+      font-size:0.85rem;
+    }
+    .status.error { border-left-color:#ff5252; }
+    .status.info { border-left-color:#0e6efd; }
+    .small { color:#999; font-size:0.8rem; }
+    .image-container {
+      margin-top:16px;
+      text-align:center;
+    }
+    .generated-image {
+      max-width:100%;
+      max-height:600px;
+      border-radius:8px;
+      border:2px solid #333;
+      margin-top:12px;
+    }
+    .log-entry {
+      background:#000;
+      padding:10px;
+      margin-bottom:8px;
+      border-radius:6px;
+      border-left:3px solid #4caf50;
+      font-size:0.8rem;
+      font-family:monospace;
+    }
+    .log-entry.error {
+      border-left-color:#ff5252;
+    }
+    .stats-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+      gap:12px;
+      margin-top:12px;
+    }
+    .stat-box {
+      background:#000;
+      padding:12px;
+      border-radius:6px;
+      text-align:center;
+    }
+    .stat-value {
+      font-size:1.5rem;
+      font-weight:bold;
+      color:#4caf50;
+    }
+    .stat-label {
+      font-size:0.75rem;
+      color:#aaa;
+      margin-top:4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Day 17 — Image Generation Fundamentals</h1>
+  <p class="subtitle">
+    Generate images with DALL·E 3 or DALL·E 2. All requests are logged with parameters, latency, and cost estimates.
+  </p>
+
+  <div id="statusBox" class="status">
+    Status: <span id="statusText">Ready</span>
+  </div>
+
+  <!-- Image Generation -->
+  <div class="box">
+    <h2>1. Generate Image</h2>
+    
+    <label>Prompt *</label>
+    <textarea id="promptInput" rows="3" placeholder="e.g., A futuristic city at sunset with flying cars"></textarea>
+
+    <div class="row">
+      <div class="col">
+        <label>Model</label>
+        <select id="modelSelect">
+          <option value="dall-e-3">DALL·E 3</option>
+          <option value="dall-e-2">DALL·E 2</option>
+        </select>
+      </div>
+      <div class="col">
+        <label>Size</label>
+        <select id="sizeSelect">
+          <option value="1024x1024">1024×1024 (Square)</option>
+          <option value="1024x1792">1024×1792 (Portrait)</option>
+          <option value="1792x1024">1792×1024 (Landscape)</option>
+        </select>
+        <p class="small" id="sizeNote">DALL·E 3 sizes shown. Will update based on model.</p>
+      </div>
+      <div class="col">
+        <label>Quality (DALL·E 3 only)</label>
+        <select id="qualitySelect">
+          <option value="standard">Standard</option>
+          <option value="hd">HD</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <label>Steps (logged but not used by DALL·E)</label>
+        <input id="stepsInput" type="number" min="1" max="50" value="" placeholder="Optional">
+      </div>
+      <div class="col">
+        <label>Seed (logged but not used by DALL·E)</label>
+        <input id="seedInput" type="number" value="" placeholder="Optional">
+      </div>
+    </div>
+
+    <button onclick="generateImage()" id="generateBtn">Generate Image</button>
+
+    <div id="imageContainer" class="image-container" style="display:none;">
+      <img id="generatedImage" class="generated-image" alt="Generated image">
+      <div id="imageInfo" style="margin-top:8px; font-size:0.85rem; color:#aaa;"></div>
+    </div>
+  </div>
+
+  <!-- Statistics -->
+  <div class="box">
+    <h2>2. Statistics</h2>
+    <button onclick="loadStats()">Refresh Stats</button>
+    <div id="statsContainer" class="stats-grid"></div>
+  </div>
+
+  <!-- Recent Logs -->
+  <div class="box">
+    <h2>3. Recent Logs</h2>
+    <button onclick="loadLogs()">Refresh Logs</button>
+    <p class="small">Shows last 20 requests with all logged parameters.</p>
+    <div id="logsContainer" style="margin-top:12px;"></div>
+  </div>
+
+<script>
+function setStatus(text, isError=false, isInfo=false) {
+  const box = document.getElementById("statusBox");
+  document.getElementById("statusText").textContent = text;
+  box.className = "status" + (isError ? " error" : isInfo ? " info" : "");
+}
+
+// Update size options based on model
+document.getElementById("modelSelect").addEventListener("change", function() {
+  const model = this.value;
+  const sizeSelect = document.getElementById("sizeSelect");
+  const sizeNote = document.getElementById("sizeNote");
+  
+  if (model === "dall-e-3") {
+    sizeSelect.innerHTML = `
+      <option value="1024x1024">1024×1024 (Square)</option>
+      <option value="1024x1792">1024×1792 (Portrait)</option>
+      <option value="1792x1024">1792×1024 (Landscape)</option>
+    `;
+    sizeNote.textContent = "DALL·E 3 sizes";
+  } else {
+    sizeSelect.innerHTML = `
+      <option value="256x256">256×256</option>
+      <option value="512x512">512×512</option>
+      <option value="1024x1024">1024×1024</option>
+    `;
+    sizeNote.textContent = "DALL·E 2 sizes";
+  }
+});
+
+async function generateImage() {
+  const prompt = document.getElementById("promptInput").value.trim();
+  if (!prompt) {
+    alert("Please enter a prompt");
+    return;
+  }
+
+  const model = document.getElementById("modelSelect").value;
+  const size = document.getElementById("sizeSelect").value;
+  const quality = document.getElementById("qualitySelect").value;
+  const steps = document.getElementById("stepsInput").value || null;
+  const seed = document.getElementById("seedInput").value || null;
+
+  setStatus("Generating image...", false, true);
+  document.getElementById("generateBtn").disabled = true;
+  document.getElementById("imageContainer").style.display = "none";
+
+  try {
+    const res = await fetch("/generate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        prompt,
+        model,
+        size,
+        quality,
+        steps: steps ? parseInt(steps) : null,
+        seed: seed ? parseInt(seed) : null,
+      })
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      setStatus("Error: " + (data.error || "Unknown error"), true);
+      return;
+    }
+
+    // Show image
+    document.getElementById("generatedImage").src = data.image_url;
+    document.getElementById("imageContainer").style.display = "block";
+    
+    // Show log info
+    const log = data.log_entry;
+    document.getElementById("imageInfo").innerHTML = `
+      <strong>Model:</strong> ${log.model} | 
+      <strong>Size:</strong> ${log.parameters.size} | 
+      <strong>Latency:</strong> ${log.latency_ms}ms | 
+      <strong>Cost:</strong> $${log.cost_estimate_usd}
+    `;
+
+    setStatus("Image generated successfully!");
+    
+    // Refresh stats and logs
+    loadStats();
+    loadLogs();
+
+  } catch (err) {
+    setStatus("Request failed: " + err.message, true);
+  } finally {
+    document.getElementById("generateBtn").disabled = false;
+  }
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch("/logs/stats");
+    const stats = await res.json();
+
+    const container = document.getElementById("statsContainer");
+    container.innerHTML = `
+      <div class="stat-box">
+        <div class="stat-value">${stats.total_requests}</div>
+        <div class="stat-label">Total Requests</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" style="color:#4caf50">${stats.successful}</div>
+        <div class="stat-label">Successful</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" style="color:#ff5252">${stats.failed}</div>
+        <div class="stat-label">Failed</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">$${stats.total_cost_estimate_usd}</div>
+        <div class="stat-label">Total Cost</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${stats.avg_latency_ms}ms</div>
+        <div class="stat-label">Avg Latency</div>
+      </div>
+    `;
+  } catch (err) {
+    console.error("Failed to load stats:", err);
+  }
+}
+
+async function loadLogs() {
+  try {
+    const res = await fetch("/logs?limit=20");
+    const data = await res.json();
+
+    const container = document.getElementById("logsContainer");
+    if (data.logs.length === 0) {
+      container.innerHTML = "<p class='small'>No logs yet. Generate an image to see logs.</p>";
+      return;
+    }
+
+    container.innerHTML = data.logs.map(log => {
+      const statusClass = log.success ? "" : "error";
+      const timestamp = new Date(log.timestamp).toLocaleString();
+      return `
+        <div class="log-entry ${statusClass}">
+          <strong>[${timestamp}]</strong> ${log.model} | 
+          Size: ${log.parameters.size} | 
+          Quality: ${log.parameters.quality} | 
+          Latency: ${log.latency_ms}ms | 
+          Cost: $${log.cost_estimate_usd}<br>
+          <strong>Prompt:</strong> ${log.prompt.substring(0, 100)}${log.prompt.length > 100 ? "..." : ""}<br>
+          ${log.error ? `<span style="color:#ff5252">Error: ${log.error}</span>` : ""}
+          ${log.image_url ? `<a href="${log.image_url}" target="_blank" style="color:#4caf50">View Image</a>` : ""}
+        </div>
+      `;
+    }).join("");
+  } catch (err) {
+    console.error("Failed to load logs:", err);
+  }
+}
+
+// Load stats and logs on page load
+window.addEventListener("load", function() {
+  loadStats();
+  loadLogs();
+});
+</script>
+</body>
+</html>
+
