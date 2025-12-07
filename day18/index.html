@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Day 18 — Prompt & Style Systems</title>
+  <style>
+    body {
+      background:#0b0b0b;
+      color:#f5f5f5;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px;
+    }
+    h1 { color:#4caf50; margin-bottom:4px; }
+    .subtitle { color:#aaa; margin-bottom:16px; font-size:0.9rem; }
+    .box {
+      background:#151515;
+      border-radius:10px;
+      padding:16px 18px;
+      border:1px solid #333;
+      margin-bottom:18px;
+    }
+    button {
+      padding:8px 14px;
+      border-radius:6px;
+      border:none;
+      background:#0e6efd;
+      color:#fff;
+      font-size:0.9rem;
+      cursor:pointer;
+      margin-right:8px;
+      margin-top:8px;
+    }
+    button:hover { background:#0b5cd1; }
+    button:disabled { background:#555; cursor:not-allowed; }
+    input, textarea, select {
+      width:100%;
+      box-sizing:border-box;
+      padding:8px;
+      border-radius:6px;
+      border:1px solid #444;
+      background:#050505;
+      color:#f5f5f5;
+      font-family:inherit;
+      font-size:0.9rem;
+      margin-top:6px;
+      margin-bottom:10px;
+    }
+    label {
+      font-size:0.85rem;
+      color:#ccc;
+      display:block;
+      margin-top:8px;
+    }
+    .row { display:flex; flex-wrap:wrap; gap:16px; }
+    .col { flex:1 1 0; min-width:200px; }
+    .status {
+      background:#111;
+      border-radius:6px;
+      padding:8px 10px;
+      margin-bottom:14px;
+      border-left:4px solid #4caf50;
+      font-size:0.85rem;
+    }
+    .status.error { border-left-color:#ff5252; }
+    .status.info { border-left-color:#0e6efd; }
+    .small { color:#999; font-size:0.8rem; }
+    
+    /* Image Grid */
+    .image-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));
+      gap:20px;
+      margin-top:20px;
+    }
+    .image-card {
+      background:#000;
+      border-radius:8px;
+      padding:12px;
+      border:2px solid #333;
+    }
+    .image-card h3 {
+      margin:0 0 8px 0;
+      font-size:0.95rem;
+      color:#4caf50;
+    }
+    .image-card img {
+      width:100%;
+      border-radius:6px;
+      margin-bottom:8px;
+    }
+    .image-card .prompt-preview {
+      font-size:0.75rem;
+      color:#aaa;
+      margin-top:8px;
+      max-height:60px;
+      overflow:hidden;
+    }
+    .image-card .meta {
+      font-size:0.7rem;
+      color:#666;
+      margin-top:4px;
+    }
+    
+    /* Profile Cards */
+    .profile-card {
+      background:#1a1a1a;
+      border-radius:8px;
+      padding:12px;
+      margin-bottom:12px;
+      border-left:4px solid #4caf50;
+    }
+    .profile-card h3 {
+      margin:0 0 8px 0;
+      color:#4caf50;
+    }
+    .profile-detail {
+      font-size:0.8rem;
+      margin:4px 0;
+      color:#ccc;
+    }
+    .profile-detail strong {
+      color:#fff;
+    }
+    
+    .loading {
+      text-align:center;
+      padding:20px;
+      color:#aaa;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Day 18 — Prompt & Style Systems</h1>
+  <p class="subtitle">
+    Generate brand-consistent visuals using style profiles. Compare the same subject across different brand styles.
+  </p>
+
+  <div id="statusBox" class="status">
+    Status: <span id="statusText">Ready</span>
+  </div>
+
+  <!-- Style Profiles -->
+  <div class="box">
+    <h2>1. Style Profiles</h2>
+    <button onclick="loadProfiles()">Load Profiles</button>
+    <div id="profilesContainer"></div>
+  </div>
+
+  <!-- Generate Grid -->
+  <div class="box">
+    <h2>2. Generate Style Grid</h2>
+    <p class="small">Generate the same subject in all style profiles for comparison.</p>
+    
+    <label>Base Subject *</label>
+    <input id="subjectInput" type="text" placeholder="e.g., A coffee cup, A smartphone, A bicycle">
+    
+    <div class="row">
+      <div class="col">
+        <label>Aspect Ratio</label>
+        <select id="aspectRatioSelect">
+          <option value="1024x1024">1024×1024 (Square)</option>
+          <option value="1024x1792">1024×1792 (Portrait)</option>
+          <option value="1792x1024">1792×1024 (Landscape)</option>
+        </select>
+      </div>
+    </div>
+
+    <button onclick="generateGrid()" id="generateGridBtn">Generate Grid (All Styles)</button>
+    <button onclick="generateSingle()" id="generateSingleBtn">Generate Single</button>
+    
+    <select id="singleProfileSelect" style="width:auto; display:inline-block; margin-left:8px;">
+      <option value="">Select profile...</option>
+    </select>
+
+    <div id="gridContainer" class="image-grid" style="display:none;"></div>
+    <div id="loadingContainer" class="loading" style="display:none;">Generating images... This may take a minute.</div>
+  </div>
+
+  <!-- Statistics -->
+  <div class="box">
+    <h2>3. Statistics by Style</h2>
+    <button onclick="loadStats()">Refresh Stats</button>
+    <div id="statsContainer"></div>
+  </div>
+
+<script>
+let profiles = [];
+
+function setStatus(text, isError=false, isInfo=false) {
+  const box = document.getElementById("statusBox");
+  document.getElementById("statusText").textContent = text;
+  box.className = "status" + (isError ? " error" : isInfo ? " info" : "");
+}
+
+async function loadProfiles() {
+  try {
+    const res = await fetch("/profiles");
+    const data = await res.json();
+    profiles = data.profiles || [];
+    
+    const container = document.getElementById("profilesContainer");
+    const singleSelect = document.getElementById("singleProfileSelect");
+    
+    // Clear and populate single select
+    singleSelect.innerHTML = '<option value="">Select profile...</option>';
+    
+    container.innerHTML = profiles.map(profile => {
+      singleSelect.innerHTML += `<option value="${profile.id}">${profile.name}</option>`;
+      
+      return `
+        <div class="profile-card">
+          <h3>${profile.name} (${profile.id})</h3>
+          <div class="profile-detail"><strong>Color Palette:</strong> ${profile.color_palette}</div>
+          <div class="profile-detail"><strong>Mood:</strong> ${profile.mood}</div>
+          <div class="profile-detail"><strong>Style:</strong> ${profile.visual_style.type}, ${profile.visual_style.texture}</div>
+          <div class="profile-detail"><strong>Do's:</strong> ${profile.dos.slice(0, 2).join(", ")}</div>
+          <div class="profile-detail"><strong>Don'ts:</strong> ${profile.donts.slice(0, 2).join(", ")}</div>
+        </div>
+      `;
+    }).join("");
+    
+    setStatus(`Loaded ${profiles.length} style profiles`);
+  } catch (err) {
+    setStatus("Failed to load profiles: " + err.message, true);
+  }
+}
+
+async function generateGrid() {
+  const subject = document.getElementById("subjectInput").value.trim();
+  if (!subject) {
+    alert("Please enter a base subject");
+    return;
+  }
+  
+  const aspectRatio = document.getElementById("aspectRatioSelect").value;
+  
+  setStatus("Generating grid... This will take a while (3 images)", false, true);
+  document.getElementById("generateGridBtn").disabled = true;
+  document.getElementById("gridContainer").style.display = "none";
+  document.getElementById("loadingContainer").style.display = "block";
+  
+  try {
+    const res = await fetch("/generate_grid", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        base_subject: subject,
+        aspect_ratio: aspectRatio,
+      })
+    });
+    
+    const data = await res.json();
+    
+    if (!data.success) {
+      setStatus("Error: " + (data.error || "Unknown error"), true);
+      return;
+    }
+    
+    // Display grid
+    const container = document.getElementById("gridContainer");
+    container.innerHTML = data.results.map(result => {
+      if (!result.success) {
+        return `
+          <div class="image-card">
+            <h3>${result.profile_name} - Failed</h3>
+            <div style="color:#ff5252;">Error: ${result.error}</div>
+          </div>
+        `;
+      }
+      
+      return `
+        <div class="image-card">
+          <h3>${result.profile_name}</h3>
+          <img src="${result.image_url}" alt="${result.profile_name}">
+          <div class="meta">Latency: ${result.latency_ms}ms | Cost: $${result.cost}</div>
+          <div class="prompt-preview">${result.prompt.substring(0, 150)}...</div>
+        </div>
+      `;
+    }).join("");
+    
+    container.style.display = "grid";
+    document.getElementById("loadingContainer").style.display = "none";
+    
+    setStatus(`Generated ${data.total_generated} images (${data.total_failed} failed)`);
+    loadStats();
+    
+  } catch (err) {
+    setStatus("Request failed: " + err.message, true);
+    document.getElementById("loadingContainer").style.display = "none";
+  } finally {
+    document.getElementById("generateGridBtn").disabled = false;
+  }
+}
+
+async function generateSingle() {
+  const subject = document.getElementById("subjectInput").value.trim();
+  const profileId = document.getElementById("singleProfileSelect").value;
+  
+  if (!subject) {
+    alert("Please enter a base subject");
+    return;
+  }
+  
+  if (!profileId) {
+    alert("Please select a style profile");
+    return;
+  }
+  
+  const aspectRatio = document.getElementById("aspectRatioSelect").value;
+  
+  setStatus("Generating image...", false, true);
+  document.getElementById("generateSingleBtn").disabled = true;
+  
+  try {
+    const res = await fetch("/generate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        base_subject: subject,
+        profile_id: profileId,
+        aspect_ratio: aspectRatio,
+      })
+    });
+    
+    const data = await res.json();
+    
+    if (!data.success) {
+      setStatus("Error: " + (data.error || "Unknown error"), true);
+      return;
+    }
+    
+    // Add to grid or show
+    const container = document.getElementById("gridContainer");
+    const existing = container.innerHTML;
+    container.innerHTML = `
+      <div class="image-card">
+        <h3>${data.profile.name}</h3>
+        <img src="${data.image_url}" alt="${data.profile.name}">
+        <div class="meta">Latency: ${data.log_entry.latency_ms}ms | Cost: $${data.log_entry.cost_estimate_usd}</div>
+        <div class="prompt-preview">${data.prompt.substring(0, 150)}...</div>
+      </div>
+    ` + existing;
+    container.style.display = "grid";
+    
+    setStatus("Image generated successfully!");
+    loadStats();
+    
+  } catch (err) {
+    setStatus("Request failed: " + err.message, true);
+  } finally {
+    document.getElementById("generateSingleBtn").disabled = false;
+  }
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch("/logs/stats");
+    const data = await res.json();
+    
+    const container = document.getElementById("statsContainer");
+    const stats = data.stats || {};
+    
+    if (Object.keys(stats).length === 0) {
+      container.innerHTML = "<p class='small'>No statistics yet. Generate some images first.</p>";
+      return;
+    }
+    
+    container.innerHTML = Object.entries(stats).map(([profileId, stat]) => {
+      const profile = profiles.find(p => p.id === profileId);
+      const profileName = profile ? profile.name : profileId;
+      
+      return `
+        <div class="profile-card">
+          <h3>${profileName}</h3>
+          <div class="profile-detail"><strong>Images Generated:</strong> ${stat.count}</div>
+          <div class="profile-detail"><strong>Total Cost:</strong> $${stat.total_cost}</div>
+          <div class="profile-detail"><strong>Avg Latency:</strong> ${stat.avg_latency}ms</div>
+        </div>
+      `;
+    }).join("");
+  } catch (err) {
+    console.error("Failed to load stats:", err);
+  }
+}
+
+// Load profiles on page load
+window.addEventListener("load", function() {
+  loadProfiles();
+  loadStats();
+});
+</script>
+</body>
+</html>
+
