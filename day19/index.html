@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Day 19 — Vision QA Agent</title>
+  <style>
+    body {
+      background:#0b0b0b;
+      color:#f5f5f5;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px;
+    }
+    h1 { color:#4caf50; margin-bottom:4px; }
+    .subtitle { color:#aaa; margin-bottom:16px; font-size:0.9rem; }
+    .box {
+      background:#151515;
+      border-radius:10px;
+      padding:16px 18px;
+      border:1px solid #333;
+      margin-bottom:18px;
+    }
+    button {
+      padding:8px 14px;
+      border-radius:6px;
+      border:none;
+      background:#0e6efd;
+      color:#fff;
+      font-size:0.9rem;
+      cursor:pointer;
+      margin-right:8px;
+      margin-top:8px;
+    }
+    button:hover { background:#0b5cd1; }
+    button:disabled { background:#555; cursor:not-allowed; }
+    input, textarea, select {
+      width:100%;
+      box-sizing:border-box;
+      padding:8px;
+      border-radius:6px;
+      border:1px solid #444;
+      background:#050505;
+      color:#f5f5f5;
+      font-family:inherit;
+      font-size:0.9rem;
+      margin-top:6px;
+      margin-bottom:10px;
+    }
+    label {
+      font-size:0.85rem;
+      color:#ccc;
+      display:block;
+      margin-top:8px;
+    }
+    .row { display:flex; flex-wrap:wrap; gap:16px; }
+    .col { flex:1 1 0; min-width:200px; }
+    .status {
+      background:#111;
+      border-radius:6px;
+      padding:8px 10px;
+      margin-bottom:14px;
+      border-left:4px solid #4caf50;
+      font-size:0.85rem;
+    }
+    .status.error { border-left-color:#ff5252; }
+    .status.info { border-left-color:#0e6efd; }
+    .status.warning { border-left-color:#ffa500; }
+    .small { color:#999; font-size:0.8rem; }
+    
+    /* QA Results */
+    .qa-result {
+      background:#000;
+      border-radius:8px;
+      padding:16px;
+      margin-top:16px;
+      border-left:4px solid #4caf50;
+    }
+    .qa-result.failed {
+      border-left-color:#ff5252;
+    }
+    .qa-score {
+      font-size:2rem;
+      font-weight:bold;
+      color:#4caf50;
+      margin:8px 0;
+    }
+    .qa-score.failed {
+      color:#ff5252;
+    }
+    .checklist-item {
+      background:#1a1a1a;
+      padding:8px;
+      margin:6px 0;
+      border-radius:4px;
+      font-size:0.85rem;
+    }
+    .checklist-item.pass {
+      border-left:3px solid #4caf50;
+    }
+    .checklist-item.fail {
+      border-left:3px solid #ff5252;
+    }
+    
+    .image-container {
+      text-align:center;
+      margin:16px 0;
+    }
+    .generated-image {
+      max-width:100%;
+      max-height:500px;
+      border-radius:8px;
+      border:2px solid #333;
+    }
+    
+    .pipeline-step {
+      background:#1a1a1a;
+      padding:12px;
+      margin:8px 0;
+      border-radius:6px;
+      border-left:3px solid #0e6efd;
+    }
+    .pipeline-step.complete {
+      border-left-color:#4caf50;
+    }
+    .pipeline-step.failed {
+      border-left-color:#ff5252;
+    }
+    
+    .stats-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+      gap:12px;
+      margin-top:12px;
+    }
+    .stat-box {
+      background:#000;
+      padding:12px;
+      border-radius:6px;
+      text-align:center;
+    }
+    .stat-value {
+      font-size:1.5rem;
+      font-weight:bold;
+      color:#4caf50;
+    }
+    .stat-label {
+      font-size:0.75rem;
+      color:#aaa;
+      margin-top:4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Day 19 — Vision QA Agent</h1>
+  <p class="subtitle">
+    Automated quality assurance for generated images using vision models. Generate → Analyze → Score pipeline with automatic filtering.
+  </p>
+
+  <div id="statusBox" class="status">
+    Status: <span id="statusText">Ready</span>
+  </div>
+
+  <!-- Generate with QA -->
+  <div class="box">
+    <h2>1. Generate with QA Pipeline</h2>
+    <p class="small">Generate image → Analyze with vision model → Score → Auto-retry if below threshold</p>
+    
+    <label>Base Subject *</label>
+    <input id="subjectInput" type="text" placeholder="e.g., A coffee cup, A smartphone">
+    
+    <div class="row">
+      <div class="col">
+        <label>Style Profile</label>
+        <select id="profileSelect">
+          <option value="">Loading...</option>
+        </select>
+      </div>
+      <div class="col">
+        <label>Aspect Ratio</label>
+        <select id="aspectRatioSelect">
+          <option value="1024x1024">1024×1024 (Square)</option>
+          <option value="1024x1792">1024×1792 (Portrait)</option>
+          <option value="1792x1024">1792×1024 (Landscape)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <label>Quality Threshold (0-100)</label>
+        <input id="thresholdInput" type="number" min="0" max="100" value="70">
+        <p class="small">Minimum score to pass. Images below this will be discarded and retried.</p>
+      </div>
+      <div class="col">
+        <label>Max Retries</label>
+        <input id="maxRetriesInput" type="number" min="1" max="5" value="3">
+        <p class="small">How many times to retry if QA fails.</p>
+      </div>
+    </div>
+
+    <button onclick="generateWithQA()" id="generateBtn">Generate with QA</button>
+
+    <div id="pipelineContainer" style="display:none; margin-top:16px;"></div>
+    <div id="resultContainer" style="display:none;"></div>
+  </div>
+
+  <!-- Analyze Existing Image -->
+  <div class="box">
+    <h2>2. Analyze Existing Image</h2>
+    <label>Image URL</label>
+    <input id="imageUrlInput" type="text" placeholder="https://...">
+    
+    <label>Base Subject</label>
+    <input id="analyzeSubjectInput" type="text" placeholder="e.g., A coffee cup">
+    
+    <label>Style Profile</label>
+    <select id="analyzeProfileSelect">
+      <option value="">Loading...</option>
+    </select>
+    
+    <button onclick="analyzeImage()" id="analyzeBtn">Analyze Image</button>
+    
+    <div id="analyzeResultContainer" style="display:none;"></div>
+  </div>
+
+  <!-- Statistics -->
+  <div class="box">
+    <h2>3. QA Statistics</h2>
+    <button onclick="loadStats()">Refresh Stats</button>
+    <div id="statsContainer"></div>
+  </div>
+
+<script>
+let profiles = [];
+
+function setStatus(text, isError=false, isInfo=false, isWarning=false) {
+  const box = document.getElementById("statusBox");
+  document.getElementById("statusText").textContent = text;
+  box.className = "status" + (isError ? " error" : isWarning ? " warning" : isInfo ? " info" : "");
+}
+
+async function loadProfiles() {
+  try {
+    const res = await fetch("/profiles");
+    const data = await res.json();
+    profiles = data.profiles || [];
+    
+    const profileSelect = document.getElementById("profileSelect");
+    const analyzeSelect = document.getElementById("analyzeProfileSelect");
+    
+    profileSelect.innerHTML = '<option value="">Select profile...</option>';
+    analyzeSelect.innerHTML = '<option value="">Select profile...</option>';
+    
+    profiles.forEach(p => {
+      profileSelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+      analyzeSelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    });
+  } catch (err) {
+    setStatus("Failed to load profiles: " + err.message, true);
+  }
+}
+
+async function generateWithQA() {
+  const subject = document.getElementById("subjectInput").value.trim();
+  const profileId = document.getElementById("profileSelect").value;
+  const aspectRatio = document.getElementById("aspectRatioSelect").value;
+  const threshold = parseInt(document.getElementById("thresholdInput").value);
+  const maxRetries = parseInt(document.getElementById("maxRetriesInput").value);
+  
+  if (!subject) {
+    alert("Please enter a base subject");
+    return;
+  }
+  
+  if (!profileId) {
+    alert("Please select a style profile");
+    return;
+  }
+  
+  setStatus("Generating with QA pipeline...", false, true);
+  document.getElementById("generateBtn").disabled = true;
+  document.getElementById("pipelineContainer").style.display = "block";
+  document.getElementById("resultContainer").style.display = "none";
+  document.getElementById("pipelineContainer").innerHTML = `
+    <div class="pipeline-step">Step 1: Generating image...</div>
+    <div class="pipeline-step">Step 2: Analyzing with vision model...</div>
+    <div class="pipeline-step">Step 3: Scoring and validation...</div>
+  `;
+  
+  try {
+    const res = await fetch("/generate_with_qa", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        base_subject: subject,
+        profile_id: profileId,
+        aspect_ratio: aspectRatio,
+        quality_threshold: threshold,
+        max_retries: maxRetries,
+      })
+    });
+    
+    const data = await res.json();
+    
+    if (!data.success) {
+      setStatus("Failed: " + (data.error || "Unknown error"), true);
+      document.getElementById("pipelineContainer").innerHTML = `
+        <div class="pipeline-step failed">❌ Generation failed</div>
+        <div style="color:#ff5252; margin-top:8px;">Best score achieved: ${data.best_score || 0}/100</div>
+        <div style="margin-top:12px;">
+          <strong>Attempts:</strong>
+          ${data.attempts.map(a => `
+            <div class="pipeline-step ${a.success ? 'complete' : 'failed'}" style="margin-top:8px;">
+              Attempt ${a.attempt}: ${a.success ? `Score ${a.score}/100` : a.error || 'Failed'}
+            </div>
+          `).join('')}
+        </div>
+      `;
+      return;
+    }
+    
+    // Show pipeline steps
+    document.getElementById("pipelineContainer").innerHTML = `
+      <div class="pipeline-step complete">✅ Step 1: Image generated</div>
+      <div class="pipeline-step complete">✅ Step 2: Vision analysis complete</div>
+      <div class="pipeline-step complete">✅ Step 3: Passed QA (Score: ${data.qa_result.score}/100)</div>
+      <div class="small" style="margin-top:8px;">Total attempts: ${data.total_attempts}</div>
+    `;
+    
+    // Show result
+    const qa = data.qa_result;
+    const resultDiv = document.getElementById("resultContainer");
+    resultDiv.style.display = "block";
+    
+    const checklistHtml = Object.entries(qa.checklist_results || {}).map(([key, result]) => {
+      const pass = result.pass || result.passed || false;
+      return `
+        <div class="checklist-item ${pass ? 'pass' : 'fail'}">
+          <strong>${key.replace(/_/g, ' ').toUpperCase()}:</strong> ${pass ? '✅ PASS' : '❌ FAIL'}<br>
+          <span style="color:#aaa; font-size:0.8rem;">${result.explanation || ''}</span>
+        </div>
+      `;
+    }).join('');
+    
+    resultDiv.innerHTML = `
+      <div class="qa-result ${qa.passed ? '' : 'failed'}">
+        <div class="qa-score ${qa.passed ? '' : 'failed'}">
+          ${qa.score}/100 ${qa.passed ? '✅ PASSED' : '❌ FAILED'}
+        </div>
+        <div class="image-container">
+          <img src="${data.image_url}" class="generated-image" alt="Generated image">
+        </div>
+        <div style="margin-top:16px;">
+          <strong>Feedback:</strong>
+          <div style="margin-top:8px; color:#ccc;">${qa.feedback || 'No feedback available'}</div>
+        </div>
+        <div style="margin-top:16px;">
+          <strong>Checklist Results:</strong>
+          ${checklistHtml || '<div class="small">No checklist results available</div>'}
+        </div>
+      </div>
+    `;
+    
+    setStatus(`✅ Image generated and passed QA (Score: ${qa.score}/100)`);
+    loadStats();
+    
+  } catch (err) {
+    setStatus("Request failed: " + err.message, true);
+  } finally {
+    document.getElementById("generateBtn").disabled = false;
+  }
+}
+
+async function analyzeImage() {
+  const imageUrl = document.getElementById("imageUrlInput").value.trim();
+  const subject = document.getElementById("analyzeSubjectInput").value.trim();
+  const profileId = document.getElementById("analyzeProfileSelect").value;
+  
+  if (!imageUrl) {
+    alert("Please enter an image URL");
+    return;
+  }
+  
+  if (!profileId) {
+    alert("Please select a style profile");
+    return;
+  }
+  
+  setStatus("Analyzing image...", false, true);
+  document.getElementById("analyzeBtn").disabled = true;
+  
+  try {
+    const res = await fetch("/analyze_image", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        image_url: imageUrl,
+        profile_id: profileId,
+        base_subject: subject || "Unknown subject",
+      })
+    });
+    
+    const data = await res.json();
+    
+    if (!data.success) {
+      setStatus("Analysis failed: " + (data.error || "Unknown error"), true);
+      return;
+    }
+    
+    const qa = data.qa_result;
+    const container = document.getElementById("analyzeResultContainer");
+    container.style.display = "block";
+    
+    const checklistHtml = Object.entries(qa.checklist_results || {}).map(([key, result]) => {
+      const pass = result.pass || result.passed || false;
+      return `
+        <div class="checklist-item ${pass ? 'pass' : 'fail'}">
+          <strong>${key.replace(/_/g, ' ').toUpperCase()}:</strong> ${pass ? '✅ PASS' : '❌ FAIL'}<br>
+          <span style="color:#aaa; font-size:0.8rem;">${result.explanation || ''}</span>
+        </div>
+      `;
+    }).join('');
+    
+    container.innerHTML = `
+      <div class="qa-result ${qa.passed ? '' : 'failed'}" style="margin-top:16px;">
+        <div class="qa-score ${qa.passed ? '' : 'failed'}">
+          ${qa.score}/100 ${qa.passed ? '✅ PASSED' : '❌ FAILED'}
+        </div>
+        <div class="image-container">
+          <img src="${imageUrl}" class="generated-image" alt="Image to analyze">
+        </div>
+        <div style="margin-top:16px;">
+          <strong>Feedback:</strong>
+          <div style="margin-top:8px; color:#ccc;">${qa.feedback || 'No feedback available'}</div>
+        </div>
+        <div style="margin-top:16px;">
+          <strong>Checklist Results:</strong>
+          ${checklistHtml || '<div class="small">No checklist results available</div>'}
+        </div>
+        <div class="small" style="margin-top:8px;">Analysis latency: ${data.latency_ms}ms</div>
+      </div>
+    `;
+    
+    setStatus(`✅ Analysis complete (Score: ${qa.score}/100)`);
+    
+  } catch (err) {
+    setStatus("Request failed: " + err.message, true);
+  } finally {
+    document.getElementById("analyzeBtn").disabled = false;
+  }
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch("/logs/stats");
+    const stats = await res.json();
+    
+    const container = document.getElementById("statsContainer");
+    
+    container.innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-value">${stats.total_analyzed || 0}</div>
+          <div class="stat-label">Total Analyzed</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="color:#4caf50">${stats.passed || 0}</div>
+          <div class="stat-label">Passed</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="color:#ff5252">${stats.failed || 0}</div>
+          <div class="stat-label">Failed</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${stats.pass_rate || 0}%</div>
+          <div class="stat-label">Pass Rate</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${stats.avg_score || 0}</div>
+          <div class="stat-label">Avg Score</div>
+        </div>
+      </div>
+      ${Object.keys(stats.by_profile || {}).length > 0 ? `
+        <div style="margin-top:20px;">
+          <strong>By Profile:</strong>
+          ${Object.entries(stats.by_profile).map(([profileId, stat]) => {
+            const profile = profiles.find(p => p.id === profileId);
+            const name = profile ? profile.name : profileId;
+            return `
+              <div style="margin-top:12px; padding:8px; background:#1a1a1a; border-radius:6px;">
+                <strong>${name}:</strong> ${stat.count} analyzed, ${stat.passed} passed, avg score: ${stat.avg_score}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : ''}
+    `;
+  } catch (err) {
+    console.error("Failed to load stats:", err);
+  }
+}
+
+// Load profiles on page load
+window.addEventListener("load", function() {
+  loadProfiles();
+  loadStats();
+});
+</script>
+</body>
+</html>
+

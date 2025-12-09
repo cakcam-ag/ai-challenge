@@ -1,0 +1,89 @@
+{
+  "profiles": [
+    {
+      "id": "minimal_modern",
+      "name": "Minimal Modern",
+      "color_palette": "Neutral tones: whites, grays, soft beiges, muted pastels",
+      "mood": "Clean, professional, sophisticated, calm",
+      "visual_style": {
+        "type": "flat design",
+        "texture": "smooth, minimal texture",
+        "detail_level": "moderate detail, clean lines",
+        "lighting": "soft, even lighting",
+        "composition": "simple, balanced, lots of white space"
+      },
+      "dos": [
+        "Use clean geometric shapes",
+        "Maintain consistent color palette",
+        "Keep backgrounds simple and uncluttered",
+        "Use subtle shadows and highlights",
+        "Focus on essential elements only"
+      ],
+      "donts": [
+        "Avoid busy patterns or textures",
+        "No harsh contrasts or dramatic lighting",
+        "Avoid cluttered compositions",
+        "No overly decorative elements",
+        "Avoid vibrant or saturated colors"
+      ],
+      "style_description": "Minimalist modern design with clean lines, neutral color palette, soft lighting, and ample white space. Professional and sophisticated aesthetic."
+    },
+    {
+      "id": "vibrant_playful",
+      "name": "Vibrant Playful",
+      "color_palette": "Bright, saturated colors: vibrant blues, energetic oranges, cheerful yellows, bold purples",
+      "mood": "Energetic, fun, youthful, optimistic, dynamic",
+      "visual_style": {
+        "type": "3D rendered or illustrated",
+        "texture": "smooth with vibrant gradients",
+        "detail_level": "high detail, playful elements",
+        "lighting": "bright, dynamic lighting with colorful shadows",
+        "composition": "dynamic, energetic, bold"
+      },
+      "dos": [
+        "Use bold, saturated colors",
+        "Include playful elements and characters",
+        "Use dynamic angles and perspectives",
+        "Add vibrant gradients and color transitions",
+        "Create sense of movement and energy"
+      ],
+      "donts": [
+        "Avoid muted or desaturated colors",
+        "No dull or flat lighting",
+        "Avoid static or boring compositions",
+        "No overly serious or corporate feel",
+        "Avoid minimal or sparse designs"
+      ],
+      "style_description": "Vibrant, playful 3D style with bold saturated colors, dynamic lighting, energetic compositions, and fun, youthful aesthetic. High energy and optimistic mood."
+    },
+    {
+      "id": "elegant_luxury",
+      "name": "Elegant Luxury",
+      "color_palette": "Rich, deep tones: golds, deep purples, navy blues, emerald greens, black and white",
+      "mood": "Sophisticated, luxurious, premium, refined, timeless",
+      "visual_style": {
+        "type": "photorealistic or high-end 3D",
+        "texture": "luxurious materials: silk, marble, gold, leather",
+        "detail_level": "very high detail, premium quality",
+        "lighting": "dramatic, elegant lighting with soft shadows",
+        "composition": "balanced, elegant, premium feel"
+      },
+      "dos": [
+        "Use rich, deep color palette",
+        "Include luxurious materials and textures",
+        "Use elegant, sophisticated compositions",
+        "Add subtle gold or metallic accents",
+        "Create sense of premium quality"
+      ],
+      "donts": [
+        "Avoid cheap or plastic-looking materials",
+        "No overly bright or neon colors",
+        "Avoid casual or playful elements",
+        "No cluttered or busy designs",
+        "Avoid flat or cartoon-like styles"
+      ],
+      "style_description": "Elegant luxury style with rich deep colors, premium materials, dramatic elegant lighting, sophisticated compositions, and timeless premium aesthetic."
+    }
+  ]
+}
+
