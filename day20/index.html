@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Day 20 — Daily Productivity Assistant</title>
+  <style>
+    body {
+      background:#0b0b0b;
+      color:#f5f5f5;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px;
+    }
+    h1 { color:#4caf50; margin-bottom:4px; }
+    .subtitle { color:#aaa; margin-bottom:16px; font-size:0.9rem; }
+    .box {
+      background:#151515;
+      border-radius:10px;
+      padding:16px 18px;
+      border:1px solid #333;
+      margin-bottom:18px;
+    }
+    button {
+      padding:8px 14px;
+      border-radius:6px;
+      border:none;
+      background:#0e6efd;
+      color:#fff;
+      font-size:0.9rem;
+      cursor:pointer;
+      margin-right:8px;
+      margin-top:8px;
+    }
+    button:hover { background:#0b5cd1; }
+    button:disabled { background:#555; cursor:not-allowed; }
+    button.success { background:#4caf50; }
+    button.danger { background:#dc3545; }
+    input, textarea, select {
+      width:100%;
+      box-sizing:border-box;
+      padding:8px;
+      border-radius:6px;
+      border:1px solid #444;
+      background:#050505;
+      color:#f5f5f5;
+      font-family:inherit;
+      font-size:0.9rem;
+      margin-top:6px;
+      margin-bottom:10px;
+    }
+    label {
+      font-size:0.85rem;
+      color:#ccc;
+      display:block;
+      margin-top:8px;
+    }
+    .row { display:flex; flex-wrap:wrap; gap:16px; }
+    .col { flex:1 1 0; min-width:200px; }
+    .status {
+      background:#111;
+      border-radius:6px;
+      padding:8px 10px;
+      margin-bottom:14px;
+      border-left:4px solid #4caf50;
+      font-size:0.85rem;
+    }
+    .status.error { border-left-color:#ff5252; }
+    .status.info { border-left-color:#0e6efd; }
+    .small { color:#999; font-size:0.8rem; }
+    
+    /* Tabs */
+    .tabs {
+      display:flex;
+      gap:8px;
+      margin-bottom:16px;
+      border-bottom:2px solid #333;
+      flex-wrap:wrap;
+    }
+    .tab {
+      padding:8px 16px;
+      background:transparent;
+      border:none;
+      color:#aaa;
+      cursor:pointer;
+      border-bottom:2px solid transparent;
+      margin-bottom:-2px;
+    }
+    .tab.active {
+      color:#4caf50;
+      border-bottom-color:#4caf50;
+    }
+    .tab-content {
+      display:none;
+    }
+    .tab-content.active {
+      display:block;
+    }
+    
+    .result-box {
+      background:#000;
+      padding:12px;
+      border-radius:6px;
+      margin-top:12px;
+      white-space:pre-wrap;
+      border-left:3px solid #4caf50;
+      max-height:400px;
+      overflow:auto;
+    }
+    
+    .task-item, .meeting-item, .email-item {
+      background:#1a1a1a;
+      padding:12px;
+      border-radius:6px;
+      margin-bottom:8px;
+      border-left:3px solid #4caf50;
+    }
+    
+    .task-item.completed {
+      opacity:0.6;
+      border-left-color:#999;
+    }
+    
+    .priority-high { border-left-color:#dc3545; }
+    .priority-medium { border-left-color:#ff9800; }
+    .priority-low { border-left-color:#4caf50; }
+    
+    .action-item {
+      background:#0a0a0a;
+      padding:8px;
+      border-radius:4px;
+      margin:4px 0;
+      font-size:0.9rem;
+    }
+    
+    .stats-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+      gap:12px;
+      margin-bottom:16px;
+    }
+    
+    .stat-card {
+      background:#1a1a1a;
+      padding:16px;
+      border-radius:6px;
+      text-align:center;
+      border-left:3px solid #4caf50;
+    }
+    
+    .stat-value {
+      font-size:2rem;
+      font-weight:bold;
+      color:#4caf50;
+    }
+    
+    .stat-label {
+      font-size:0.85rem;
+      color:#aaa;
+      margin-top:4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 Day 20 — Daily Productivity Assistant</h1>
+  <p class="subtitle">
+    Real-world AI-powered assistant for meeting notes, task management, email drafts, and daily summaries.
+  </p>
+
+  <div id="statusBox" class="status">
+    Status: <span id="statusText">Ready</span>
+  </div>
+
+  <!-- Stats Overview -->
+  <div class="box">
+    <h2>📈 Overview</h2>
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-value" id="statMeetings">-</div>
+        <div class="stat-label">Meetings</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statPending">-</div>
+        <div class="stat-label">Pending Tasks</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statCompleted">-</div>
+        <div class="stat-label">Completed</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statEmails">-</div>
+        <div class="stat-label">Email Drafts</div>
+      </div>
+    </div>
+    <button onclick="loadStats()">Refresh Stats</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('meetings')">📝 Meetings</button>
+    <button class="tab" onclick="showTab('tasks')">✅ Tasks</button>
+    <button class="tab" onclick="showTab('emails')">📧 Emails</button>
+    <button class="tab" onclick="showTab('summary')">📊 Daily Summary</button>
+  </div>
+
+  <!-- Meetings Tab -->
+  <div id="meetingsTab" class="tab-content active box">
+    <h2>📝 Process Meeting Notes</h2>
+    <p class="small">Paste meeting notes and get AI-generated summary, action items, and participant list.</p>
+    
+    <label>Meeting Title</label>
+    <input id="meetingTitle" type="text" placeholder="e.g., Team Standup - Jan 15">
+    
+    <label>Meeting Date</label>
+    <input id="meetingDate" type="date" value="">
+    
+    <label>Meeting Notes</label>
+    <textarea id="meetingNotes" rows="8" placeholder="Paste your meeting notes here..."></textarea>
+    
+    <button onclick="processMeeting()" id="processMeetingBtn">Process Meeting Notes</button>
+    <button onclick="listMeetings()">List All Meetings</button>
+    <button onclick="loadSampleMeeting(1)" class="success">Load Sample 1: Team Standup</button>
+    <button onclick="loadSampleMeeting(2)" class="success">Load Sample 2: Client Meeting</button>
+    <button onclick="loadSampleMeeting(3)" class="success">Load Sample 3: Architecture Review</button>
+    
+    <div id="meetingResult" style="margin-top:12px;"></div>
+    <div id="meetingsList" style="margin-top:12px;"></div>
+  </div>
+
+  <!-- Tasks Tab -->
+  <div id="tasksTab" class="tab-content box">
+    <h2>✅ Task Management</h2>
+    
+    <div class="row">
+      <div class="col">
+        <h3>Create Task</h3>
+        <label>Task Title *</label>
+        <input id="taskTitle" type="text" placeholder="e.g., Review PR #123">
+        
+        <label>Description</label>
+        <textarea id="taskDescription" rows="3" placeholder="Task details..."></textarea>
+        
+        <div class="row">
+          <div class="col">
+            <label>Priority</label>
+            <select id="taskPriority">
+              <option value="high">High</option>
+              <option value="medium" selected>Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div class="col">
+            <label>Due Date</label>
+            <input id="taskDueDate" type="date">
+          </div>
+        </div>
+        
+        <button onclick="createTask()" id="createTaskBtn">Create Task</button>
+      </div>
+      
+      <div class="col">
+        <h3>Filter Tasks</h3>
+        <button onclick="loadTasks()">All Tasks</button>
+        <button onclick="loadTasks('pending')">Pending</button>
+        <button onclick="loadTasks('completed')">Completed</button>
+      </div>
+    </div>
+    
+    <div id="tasksList" style="margin-top:16px;"></div>
+  </div>
+
+  <!-- Emails Tab -->
+  <div id="emailsTab" class="tab-content box">
+    <h2>📧 Email Draft Generator</h2>
+    <p class="small">Generate professional email drafts based on context.</p>
+    
+    <label>Recipient (optional)</label>
+    <input id="emailRecipient" type="email" placeholder="colleague@example.com">
+    
+    <label>Context / What should the email be about? *</label>
+    <textarea id="emailContext" rows="4" placeholder="e.g., Follow up on yesterday's meeting about the project timeline"></textarea>
+    
+    <label>Tone</label>
+    <select id="emailTone">
+      <option value="professional">Professional</option>
+      <option value="friendly">Friendly</option>
+      <option value="formal">Formal</option>
+      <option value="casual">Casual</option>
+    </select>
+    
+    <button onclick="generateEmail()" id="generateEmailBtn">Generate Email Draft</button>
+    <button onclick="listEmails()">List All Drafts</button>
+    
+    <div id="emailResult" style="margin-top:12px;"></div>
+    <div id="emailsList" style="margin-top:12px;"></div>
+  </div>
+
+  <!-- Daily Summary Tab -->
+  <div id="summaryTab" class="tab-content box">
+    <h2>📊 Daily Summary</h2>
+    <p class="small">Get an AI-generated summary of today's activities, meetings, and priorities.</p>
+    
+    <button onclick="loadDailySummary()" id="summaryBtn">Generate Today's Summary</button>
+    
+    <div id="summaryResult" style="margin-top:12px;"></div>
+  </div>
+
+<script>
+// Set today's date as default
+document.getElementById("meetingDate").value = new Date().toISOString().split('T')[0];
+
+function setStatus(text, isError=false, isInfo=false) {
+  const box = document.getElementById("statusBox");
+  document.getElementById("statusText").textContent = text;
+  box.className = "status" + (isError ? " error" : isInfo ? " info" : "");
+}
+
+function showTab(tabName) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(tabName + 'Tab').classList.add('active');
+  event.target.classList.add('active');
+  
+  // Auto-load data when switching tabs
+  if (tabName === 'tasks') loadTasks();
+  else if (tabName === 'meetings') listMeetings();
+  else if (tabName === 'emails') listEmails();
+}
+
+// Stats
+async function loadStats() {
+  try {
+    const res = await fetch("/stats");
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById("statMeetings").textContent = data.meetings || 0;
+      document.getElementById("statPending").textContent = data.pending_tasks || 0;
+      document.getElementById("statCompleted").textContent = data.completed_tasks || 0;
+      document.getElementById("statEmails").textContent = data.email_drafts || 0;
+    }
+  } catch (err) {
+    console.error("Failed to load stats:", err);
+  }
+}
+
+// Meetings
+async function processMeeting() {
+  const title = document.getElementById("meetingTitle").value.trim();
+  const date = document.getElementById("meetingDate").value;
+  const notes = document.getElementById("meetingNotes").value.trim();
+  
+  if (!notes) {
+    alert("Please enter meeting notes");
+    return;
+  }
+  
+  document.getElementById("processMeetingBtn").disabled = true;
+  setStatus("Processing meeting notes...", false, true);
+  document.getElementById("meetingResult").innerHTML = "Processing...";
+  
+  try {
+    const res = await fetch("/meetings/process", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({title, date, notes})
+    });
+    
+    const data = await res.json();
+    
+    if (!data.success) {
+      document.getElementById("meetingResult").innerHTML = 
+        `<div class="result-box" style="border-left-color:#dc3545;">❌ Error: ${data.error || "Unknown"}</div>`;
+      setStatus("Processing failed", true);
+      return;
+    }
+    
+    let html = `<div class="result-box">
+<strong>✅ Meeting Processed!</strong>
+<br><br>
+<strong>Summary:</strong><br>
+${data.summary}
+<br><br>
+<strong>Participants:</strong> ${data.participants}
+<br><br>
+<strong>Action Items (${data.action_items.length}):</strong><br>`;
+    
+    if (data.action_items.length > 0) {
+      data.action_items.forEach(item => {
+        html += `<div class="action-item">👤 ${item.person || "Unknown"}: ${item.task}</div>`;
+      });
+      html += `<br><strong>✅ Created ${data.tasks_created} tasks from action items</strong>`;
+    } else {
+      html += "No action items found.";
+    }
+    
+    html += `</div>`;
+    document.getElementById("meetingResult").innerHTML = html;
+    setStatus("Meeting processed successfully");
+    
+    // Clear form
+    document.getElementById("meetingNotes").value = "";
+    document.getElementById("meetingTitle").value = "";
+    
+    // Refresh stats and list
+    loadStats();
+    listMeetings();
+    
+  } catch (err) {
+    document.getElementById("meetingResult").innerHTML = 
+      `<div class="result-box" style="border-left-color:#dc3545;">❌ Error: ${err.message}</div>`;
+    setStatus("Request failed", true);
+  } finally {
+    document.getElementById("processMeetingBtn").disabled = false;
+  }
+}
+
+async function listMeetings() {
+  try {
+    const res = await fetch("/meetings/list");
+    const data = await res.json();
+    
+    if (!data.success) {
+      document.getElementById("meetingsList").innerHTML = "❌ Error loading meetings";
+      return;
+    }
+    
+    if (data.meetings.length === 0) {
+      document.getElementById("meetingsList").innerHTML = "<p class='small'>No meetings yet.</p>";
+      return;
+    }
+    
+    let html = "<h3>Recent Meetings</h3>";
+    data.meetings.forEach(meeting => {
+      html += `<div class="meeting-item">
+        <strong>${meeting.title}</strong> - ${meeting.date}
+        <br><span class="small">${meeting.summary}</span>
+      </div>`;
+    });
+    
+    document.getElementById("meetingsList").innerHTML = html;
+  } catch (err) {
+    document.getElementById("meetingsList").innerHTML = "❌ Error: " + err.message;
+  }
+}
+
+function loadSampleMeeting(num) {
+  const samples = {
+    1: {
+      title: "Team Standup - Sprint Planning",
+      date: "2024-01-15",
+      notes: `We had our weekly team standup today. Sarah reported that she finished the authentication module and it's ready for review. John mentioned he's blocked on the database migration because he needs access to the staging environment. We decided to escalate this to DevOps.
+
+Mike shared that he's working on the API documentation and expects to finish by Wednesday. Lisa brought up that we need to discuss the new feature requirements from the product team - they want to add a notification system.
+
+Action items:
+- Sarah: Create PR for authentication module (due: today)
+- John: Contact DevOps for staging access (due: tomorrow)
+- Mike: Complete API documentation (due: Wednesday)
+- Lisa: Schedule meeting with product team about notifications (due: Friday)
+- Team Lead: Review authentication PR by end of day
+
+We also discussed the upcoming sprint goals. We're aiming to complete the user dashboard by end of month. Everyone agreed we need to prioritize the database migration first since it's blocking other work.`
+    },
+    2: {
+      title: "Client Presentation - Q4 Roadmap",
+      date: "2024-01-16",
+      notes: `Met with Acme Corp today to present our Q4 roadmap. Attendees: David (CEO), Maria (CTO), and their team of 5 engineers. We presented our plans for the new analytics dashboard, mobile app improvements, and integration with their CRM system.
+
+David was very interested in the analytics dashboard and asked if we could accelerate the timeline. Maria raised concerns about data security and compliance requirements. We discussed GDPR compliance and agreed to have a dedicated security review session.
+
+Key decisions:
+- Analytics dashboard moved to priority 1
+- Security review scheduled for next week
+- Mobile app improvements pushed to Q1 next year
+- CRM integration timeline confirmed for March
+
+Action items:
+- Project Manager: Prepare security review documentation (due: Friday)
+- Engineering Lead: Create detailed analytics dashboard spec (due: Monday)
+- Sales Team: Follow up with David about budget approval (due: Thursday)
+- Security Team: Schedule compliance review meeting (due: next week)
+
+David mentioned they're planning a major product launch in April, so we need to ensure everything is ready by then. Maria wants weekly status updates moving forward.`
+    },
+    3: {
+      title: "Technical Architecture Review",
+      date: "2024-01-17",
+      notes: `Architecture review meeting with the engineering team. Participants: Alex (Senior Engineer), Emma (Backend Lead), Tom (Frontend Lead), and Rachel (DevOps).
+
+We discussed the current microservices architecture and identified several pain points:
+1. Service communication is getting complex with 15+ services
+2. Database queries are slow due to lack of proper indexing
+3. Deployment pipeline takes too long (45 minutes average)
+
+Alex proposed implementing a service mesh to handle inter-service communication. Emma suggested we need to audit all database queries and add indexes. Tom mentioned the frontend build process could be optimized.
+
+Rachel brought up infrastructure costs - we're spending too much on cloud resources. She suggested moving some services to reserved instances.
+
+Decisions made:
+- Approved service mesh implementation (Istio) - start next sprint
+- Database audit and optimization - assign to backend team
+- Frontend build optimization - Tom to investigate
+- Infrastructure cost review - Rachel to prepare report
+
+Action items:
+- Alex: Research Istio implementation and create POC (due: next Friday)
+- Emma: Audit database queries and create optimization plan (due: Wednesday)
+- Tom: Profile frontend build and identify bottlenecks (due: Monday)
+- Rachel: Prepare infrastructure cost analysis report (due: Thursday)
+- Engineering Manager: Review all proposals and prioritize (due: Friday)
+
+We also discussed the upcoming system migration. Everyone agreed we need a detailed migration plan with rollback procedures. Next architecture review scheduled for two weeks from now.`
+    }
+  };
+  
+  const sample = samples[num];
+  if (sample) {
+    document.getElementById("meetingTitle").value = sample.title;
+    document.getElementById("meetingDate").value = sample.date;
+    document.getElementById("meetingNotes").value = sample.notes;
+    setStatus(`Loaded sample meeting ${num}`, false, true);
+  }
+}
+
+// Tasks
+async function createTask() {
+  const title = document.getElementById("taskTitle").value.trim();
+  const description = document.getElementById("taskDescription").value.trim();
+  const priority = document.getElementById("taskPriority").value;
+  const dueDate = document.getElementById("taskDueDate").value;
+  
+  if (!title) {
+    alert("Task title is required");
+    return;
+  }
+  
+  document.getElementById("createTaskBtn").disabled = true;
+  
+  try {
+    const res = await fetch("/tasks/create", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({title, description, priority, due_date: dueDate || null})
+    });
+    
+    const data = await res.json();
+    
+    if (data.success) {
+      setStatus("Task created");
+      document.getElementById("taskTitle").value = "";
+      document.getElementById("taskDescription").value = "";
+      document.getElementById("taskDueDate").value = "";
+      loadTasks();
+      loadStats();
+    } else {
+      alert("Error: " + (data.error || "Unknown"));
+    }
+  } catch (err) {
+    alert("Error: " + err.message);
+  } finally {
+    document.getElementById("createTaskBtn").disabled = false;
+  }
+}
+
+async function loadTasks(status = null) {
+  try {
+    const url = status ? `/tasks/list?status=${status}` : "/tasks/list";
+    const res = await fetch(url);
+    const data = await res.json();
+    
+    if (!data.success) {
+      document.getElementById("tasksList").innerHTML = "❌ Error loading tasks";
+      return;
+    }
+    
+    if (data.tasks.length === 0) {
+      document.getElementById("tasksList").innerHTML = "<p class='small'>No tasks found.</p>";
+      return;
+    }
+    
+    let html = `<h3>Tasks (${data.tasks.length})</h3>`;
+    data.tasks.forEach(task => {
+      const completed = task.status === 'completed';
+      html += `<div class="task-item priority-${task.priority} ${completed ? 'completed' : ''}">
+        <strong>${task.title}</strong>
+        ${task.description ? `<br><span class="small">${task.description}</span>` : ''}
+        <br>
+        <span class="small">
+          Priority: ${task.priority} | 
+          Status: ${task.status}
+          ${task.due_date ? ` | Due: ${task.due_date}` : ''}
+        </span>
+        ${!completed ? `<button class="success" onclick="completeTask(${task.id})" style="margin-top:8px;">Mark Complete</button>` : ''}
+      </div>`;
+    });
+    
+    document.getElementById("tasksList").innerHTML = html;
+  } catch (err) {
+    document.getElementById("tasksList").innerHTML = "❌ Error: " + err.message;
+  }
+}
+
+async function completeTask(taskId) {
+  try {
+    const res = await fetch(`/tasks/${taskId}/complete`, {method: "POST"});
+    const data = await res.json();
+    
+    if (data.success) {
+      setStatus("Task completed");
+      loadTasks();
+      loadStats();
+    } else {
+      alert("Error: " + (data.error || "Unknown"));
+    }
+  } catch (err) {
+    alert("Error: " + err.message);
+  }
+}
+
+// Emails
+async function generateEmail() {
+  const recipient = document.getElementById("emailRecipient").value.trim();
+  const context = document.getElementById("emailContext").value.trim();
+  const tone = document.getElementById("emailTone").value;
+  
+  if (!context) {
+    alert("Please provide context for the email");
+    return;
+  }
+  
+  document.getElementById("generateEmailBtn").disabled = true;
+  setStatus("Generating email draft...", false, true);
+  document.getElementById("emailResult").innerHTML = "Generating...";
+  
+  try {
+    const res = await fetch("/emails/generate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({recipient, context, tone})
+    });
+    
+    const data = await res.json();
+    
+    if (!data.success) {
+      document.getElementById("emailResult").innerHTML = 
+        `<div class="result-box" style="border-left-color:#dc3545;">❌ Error: ${data.error || "Unknown"}</div>`;
+      setStatus("Generation failed", true);
+      return;
+    }
+    
+    let html = `<div class="result-box">
+<strong>✅ Email Draft Generated!</strong>
+<br><br>
+<strong>To:</strong> ${data.recipient || "Not specified"}
+<br><br>
+<strong>Subject:</strong> ${data.subject}
+<br><br>
+<strong>Body:</strong><br>
+${data.body.replace(/\n/g, '<br>')}
+</div>`;
+    
+    document.getElementById("emailResult").innerHTML = html;
+    setStatus("Email draft generated");
+    
+    // Clear form
+    document.getElementById("emailContext").value = "";
+    document.getElementById("emailRecipient").value = "";
+    
+    loadStats();
+    listEmails();
+    
+  } catch (err) {
+    document.getElementById("emailResult").innerHTML = 
+      `<div class="result-box" style="border-left-color:#dc3545;">❌ Error: ${err.message}</div>`;
+    setStatus("Request failed", true);
+  } finally {
+    document.getElementById("generateEmailBtn").disabled = false;
+  }
+}
+
+async function listEmails() {
+  try {
+    const res = await fetch("/emails/list");
+    const data = await res.json();
+    
+    if (!data.success) {
+      document.getElementById("emailsList").innerHTML = "❌ Error loading emails";
+      return;
+    }
+    
+    if (data.drafts.length === 0) {
+      document.getElementById("emailsList").innerHTML = "<p class='small'>No email drafts yet.</p>";
+      return;
+    }
+    
+    let html = "<h3>Recent Email Drafts</h3>";
+    data.drafts.forEach(draft => {
+      html += `<div class="email-item">
+        <strong>${draft.subject}</strong>
+        <br><span class="small">To: ${draft.recipient || "Not specified"} | ${draft.created_at}</span>
+      </div>`;
+    });
+    
+    document.getElementById("emailsList").innerHTML = html;
+  } catch (err) {
+    document.getElementById("emailsList").innerHTML = "❌ Error: " + err.message;
+  }
+}
+
+// Daily Summary
+async function loadDailySummary() {
+  document.getElementById("summaryBtn").disabled = true;
+  setStatus("Generating daily summary...", false, true);
+  document.getElementById("summaryResult").innerHTML = "Generating...";
+  
+  try {
+    const res = await fetch("/summary/daily");
+    const data = await res.json();
+    
+    if (!data.success) {
+      document.getElementById("summaryResult").innerHTML = 
+        `<div class="result-box" style="border-left-color:#dc3545;">❌ Error: ${data.error || "Unknown"}</div>`;
+      setStatus("Summary failed", true);
+      return;
+    }
+    
+    let html = `<div class="result-box">
+<strong>📊 Daily Summary - ${data.date}</strong>
+<br><br>
+<strong>Activities:</strong><br>
+• Meetings: ${data.meetings_count}<br>
+• Pending Tasks: ${data.pending_tasks}<br>
+• Completed Today: ${data.completed_today}
+<br><br>
+<strong>AI Summary:</strong><br>
+${data.ai_summary}
+<br><br>`;
+    
+    if (data.recent_meetings.length > 0) {
+      html += `<strong>Recent Meetings:</strong><br>`;
+      data.recent_meetings.forEach(m => {
+        html += `• ${m.title}: ${m.summary}<br>`;
+      });
+      html += `<br>`;
+    }
+    
+    if (data.high_priority_tasks.length > 0) {
+      html += `<strong>High Priority Tasks:</strong><br>`;
+      data.high_priority_tasks.forEach(t => {
+        html += `• ${t.title}<br>`;
+      });
+    }
+    
+    html += `</div>`;
+    document.getElementById("summaryResult").innerHTML = html;
+    setStatus("Summary generated");
+    
+  } catch (err) {
+    document.getElementById("summaryResult").innerHTML = 
+      `<div class="result-box" style="border-left-color:#dc3545;">❌ Error: ${err.message}</div>`;
+    setStatus("Request failed", true);
+  } finally {
+    document.getElementById("summaryBtn").disabled = false;
+  }
+}
+
+// Load stats on page load
+window.addEventListener("load", function() {
+  loadStats();
+});
+</script>
+</body>
+</html>
